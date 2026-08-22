@@ -19,12 +19,13 @@ describe("Sailbox lifecycle", () => {
       id: "box-1",
       run: (argv, options) => {
         commands.push({ argv: [...argv], ...options });
+        const command = argv.slice(3);
         return Promise.resolve({
           exitCode: 0,
           stdout:
-            argv[0] === "git" && argv[1] === "ls-files"
+            command[0] === "git" && command[1] === "ls-files"
               ? "package.json\npnpm-lock.yaml\n"
-              : argv[0] === "git" && argv[1] === "show"
+              : command[0] === "git" && command[1] === "show"
                 ? JSON.stringify({
                     scripts: {
                       test: "vitest run",
@@ -69,6 +70,9 @@ describe("Sailbox lifecycle", () => {
     ]);
     expect(commands[0]).toEqual({
       argv: [
+        "env",
+        "-C",
+        "/workspace",
         "git",
         "clone",
         "--filter=blob:none",
@@ -76,11 +80,13 @@ describe("Sailbox lifecycle", () => {
         "https://github.com/Kylejeong2/gauntlet.git",
         "/workspace/repo",
       ],
-      cwd: "/workspace",
       env: {},
       timeoutSeconds: 120,
     });
     expect(commands[3]?.argv).toEqual([
+      "env",
+      "-C",
+      "/workspace/repo",
       "git",
       "checkout",
       "--detach",
@@ -96,12 +102,13 @@ describe("Sailbox lifecycle", () => {
     ).toHaveLength(1);
     expect(
       commands.filter(
-        (command) => command.argv.join(" ") === "corepack pnpm test",
+        (command) => command.argv.slice(3).join(" ") === "corepack pnpm test",
       ),
     ).toHaveLength(1);
     expect(
       commands.filter(
-        (command) => command.argv.join(" ") === "corepack pnpm run docs:build",
+        (command) =>
+          command.argv.slice(3).join(" ") === "corepack pnpm run docs:build",
       ),
     ).toHaveLength(1);
     expect(

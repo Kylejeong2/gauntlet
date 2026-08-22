@@ -14,7 +14,6 @@ export type SailboxInstance = Readonly<{
   run: (
     argv: readonly string[],
     options: Readonly<{
-      cwd?: string;
       env?: Readonly<Record<string, string>>;
       timeoutSeconds?: number;
     }>,
@@ -244,8 +243,7 @@ const checkedRun = async (
   cwd: string,
   audit: (event: SailboxAuditEvent) => void,
 ): Promise<SailboxCommandResult> => {
-  const result = await instance.run(argv, {
-    cwd,
+  const result = await instance.run(inDirectory(cwd, argv), {
     env: {},
     timeoutSeconds: 120,
   });
@@ -413,8 +411,7 @@ const runEvidenceCommand = (
   audit: (event: SailboxAuditEvent) => void,
 ): Promise<SailboxCommandResult> =>
   instance
-    .run(argv, {
-      cwd: "/workspace/repo",
+    .run(inDirectory("/workspace/repo", argv), {
       env: {},
       timeoutSeconds: 180,
     })
@@ -427,3 +424,8 @@ const runEvidenceCommand = (
       });
       return result;
     });
+
+const inDirectory = (
+  cwd: string,
+  argv: readonly string[],
+): readonly string[] => ["env", "-C", cwd, ...argv];
