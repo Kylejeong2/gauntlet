@@ -14,6 +14,14 @@ import {
   type UsdMicros,
   type WorkerId,
 } from "../domain/ids.js";
+import {
+  capturedPullRequestSnapshotSchema,
+  persistedPullRequestSnapshotSchema,
+  sameCapturedSnapshot,
+  snapshotFileSchema,
+  type CapturedPullRequestSnapshot,
+  type PersistedPullRequestSnapshot,
+} from "../domain/snapshot.js";
 
 const acceptRunRequestSchema = z
   .object({
@@ -22,6 +30,9 @@ const acceptRunRequestSchema = z
     installationId: z.unknown().transform(installationId),
     repositoryId: z.unknown().transform(repositoryId),
     pullNumber: z.unknown().transform(pullNumber),
+    owner: z.string().trim().min(1).max(255),
+    repository: z.string().trim().min(1).max(255),
+    baseSha: z.unknown().transform(commitSha),
     headSha: z.unknown().transform(commitSha),
     receivedAtMs: z.number().int().nonnegative(),
   })
@@ -47,6 +58,59 @@ const reservationRowSchema = z.object({
   reserved_micros: z.number().int().nonnegative(),
 });
 const totalRowSchema = z.object({ total: z.number().int().nonnegative() });
+const ineligibleReasonSchema = z.enum([
+  "unsupported_action",
+  "private_repository",
+  "draft_pull_request",
+  "bot_authored_pull_request",
+  "malformed_payload",
+]);
+const deliveryEligibilityRowSchema = z.object({
+  redacted_reason: ineligibleReasonSchema.nullable(),
+});
+const snapshotHeaderRowSchema = z.object({
+  run_id: z.string(),
+  installation_id: z.number().int().positive(),
+  repository_id: z.number().int().positive(),
+  pull_number: z.number().int().positive(),
+  owner: z.string().min(1),
+  repository_name: z.string().min(1),
+  base_sha: z.string(),
+  head_sha: z.string(),
+  merge_base_sha: z.string(),
+  coverage_omissions_json: z.string(),
+  created_at_ms: z.number().int().nonnegative(),
+});
+const snapshotFileRowSchema = z.object({
+  ordinal: z.number().int().nonnegative(),
+  file_kind: z.enum(["reviewable", "omitted"]),
+  path: z.string(),
+  status: z.string(),
+  changed_lines_json: z.string(),
+  patch: z.string().nullable(),
+  omission_reason: z.string().nullable(),
+});
+const queuedRunRowSchema = z
+  .object({
+    run_id: z.string(),
+    installation_id: z.number().int().positive(),
+    repository_id: z.number().int().positive(),
+    pull_number: z.number().int().positive(),
+    owner: z.string().min(1),
+    repository_name: z.string().min(1),
+    base_sha: z.string(),
+    head_sha: z.string(),
+  })
+  .transform((row) => ({
+    runId: runId(row.run_id),
+    installationId: installationId(row.installation_id),
+    repositoryId: repositoryId(row.repository_id),
+    pullNumber: pullNumber(row.pull_number),
+    owner: row.owner,
+    repository: row.repository_name,
+    baseSha: commitSha(row.base_sha),
+    headSha: commitSha(row.head_sha),
+  }));
 
 export type AcceptRunResult =
   | Readonly<{ kind: "created"; runId: RunId }>
@@ -60,10 +124,18 @@ export type Lease = Readonly<{
   attempt: number;
 }>;
 
+export type QueuedRun = z.infer<typeof queuedRunRowSchema>;
+
 export type ReserveBudgetResult =
   | Readonly<{ kind: "reserved"; amount: UsdMicros }>
   | Readonly<{ kind: "already_reserved"; amount: UsdMicros }>
   | Readonly<{ kind: "denied"; available: UsdMicros }>;
+
+export type IneligibleDeliveryReason = z.infer<typeof ineligibleReasonSchema>;
+export type RecordIneligibleDeliveryResult = Readonly<{
+  kind: "recorded" | "duplicate_delivery";
+  reason: IneligibleDeliveryReason;
+}>;
 
 export class SqliteRunStore {
   readonly #database: Database.Database;
@@ -111,14 +183,18 @@ export class SqliteRunStore {
       this.#database
         .prepare(
           `INSERT INTO review_runs (
-            run_id, installation_id, repository_id, pull_number, head_sha, state, created_at_ms
-          ) VALUES (?, ?, ?, ?, ?, 'accepted', ?)`,
+            run_id, installation_id, repository_id, pull_number, owner, repository_name,
+            base_sha, head_sha, state, created_at_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)`,
         )
         .run(
           request.runId,
           request.installationId,
           request.repositoryId,
           request.pullNumber,
+          request.owner,
+          request.repository,
+          request.baseSha,
           request.headSha,
           request.receivedAtMs,
         );
@@ -143,6 +219,192 @@ export class SqliteRunStore {
           .get(),
       );
     return parsed.count;
+  }
+
+  public recordIneligibleDelivery(
+    rawRequest: Readonly<{
+      deliveryId: unknown;
+      reason: unknown;
+      receivedAtMs: number;
+    }>,
+  ): RecordIneligibleDeliveryResult {
+    const request = z
+      .object({
+        deliveryId: z.unknown().transform(deliveryId),
+        reason: ineligibleReasonSchema,
+        receivedAtMs: z.number().int().nonnegative(),
+      })
+      .strict()
+      .parse(rawRequest);
+    return this.#database.transaction(() => {
+      const existing = this.#database
+        .prepare(
+          "SELECT redacted_reason FROM webhook_deliveries WHERE delivery_id = ?",
+        )
+        .get(request.deliveryId);
+      if (existing !== undefined) {
+        const row = deliveryEligibilityRowSchema.parse(existing);
+        if (row.redacted_reason === null)
+          throw new Error("Delivery was already accepted");
+        return {
+          kind: "duplicate_delivery",
+          reason: row.redacted_reason,
+        } satisfies RecordIneligibleDeliveryResult;
+      }
+      this.#database
+        .prepare(
+          `INSERT INTO webhook_deliveries (
+             delivery_id, run_id, eligibility, redacted_reason, received_at_ms
+           ) VALUES (?, NULL, 'rejected', ?, ?)`,
+        )
+        .run(request.deliveryId, request.reason, request.receivedAtMs);
+      return {
+        kind: "recorded",
+        reason: request.reason,
+      } satisfies RecordIneligibleDeliveryResult;
+    })();
+  }
+
+  public getRun(targetRunId: RunId): QueuedRun {
+    const row = this.#database
+      .prepare(
+        `SELECT run_id, installation_id, repository_id, pull_number, owner,
+                repository_name, base_sha, head_sha
+         FROM review_runs WHERE run_id = ?`,
+      )
+      .get(targetRunId);
+    if (row === undefined) throw new Error("Run not found");
+    return queuedRunRowSchema.parse(row);
+  }
+
+  public getSnapshot(targetRunId: RunId): PersistedPullRequestSnapshot | null {
+    const rawHeader = this.#database
+      .prepare(
+        `SELECT r.run_id, r.installation_id, r.repository_id, r.pull_number,
+                r.owner, r.repository_name, s.base_sha, s.head_sha,
+                s.merge_base_sha, s.coverage_omissions_json, s.created_at_ms
+         FROM snapshots s
+         JOIN review_runs r ON r.run_id = s.run_id
+         WHERE s.run_id = ?`,
+      )
+      .get(targetRunId);
+    if (rawHeader === undefined) return null;
+    const header = snapshotHeaderRowSchema.parse(rawHeader);
+    const rawFiles = this.#database
+      .prepare(
+        `SELECT ordinal, file_kind, path, status, changed_lines_json, patch,
+                omission_reason
+         FROM snapshot_files WHERE run_id = ? ORDER BY ordinal`,
+      )
+      .all(targetRunId);
+    const files = rawFiles.map((rawFile) => {
+      const file = snapshotFileRowSchema.parse(rawFile);
+      if (file.file_kind === "reviewable") {
+        if (file.patch === null || file.omission_reason !== null)
+          throw new Error("Invalid persisted reviewable snapshot file");
+        return snapshotFileSchema.parse({
+          ordinal: file.ordinal,
+          kind: "reviewable",
+          path: file.path,
+          status: file.status,
+          patch: file.patch,
+          changedLines: parseJson(file.changed_lines_json),
+        });
+      }
+      if (file.patch !== null || file.omission_reason !== "patch_unavailable")
+        throw new Error("Invalid persisted omitted snapshot file");
+      return snapshotFileSchema.parse({
+        ordinal: file.ordinal,
+        kind: "omitted",
+        path: file.path,
+        status: file.status,
+        reason: file.omission_reason,
+      });
+    });
+    return persistedPullRequestSnapshotSchema.parse({
+      persisted: true,
+      runId: header.run_id,
+      installationId: header.installation_id,
+      repositoryId: header.repository_id,
+      pullNumber: header.pull_number,
+      owner: header.owner,
+      repository: header.repository_name,
+      baseSha: header.base_sha,
+      headSha: header.head_sha,
+      mergeBaseSha: header.merge_base_sha,
+      files,
+      coverageOmissions: parseJson(header.coverage_omissions_json),
+      capturedAtMs: header.created_at_ms,
+    });
+  }
+
+  public putSnapshotOnce(
+    request: Readonly<{
+      runId: RunId;
+      snapshot: CapturedPullRequestSnapshot;
+      capturedAtMs: number;
+    }>,
+  ): PersistedPullRequestSnapshot {
+    const snapshot = capturedPullRequestSnapshotSchema.parse(request.snapshot);
+    if (!Number.isSafeInteger(request.capturedAtMs) || request.capturedAtMs < 0)
+      throw new Error("Invalid snapshot capture time");
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.getSnapshot(request.runId);
+      if (existing !== null) {
+        const stored: CapturedPullRequestSnapshot = {
+          formatVersion: 1,
+          mergeBaseSha: existing.mergeBaseSha,
+          files: [...existing.files],
+          coverageOmissions: [...existing.coverageOmissions],
+        };
+        if (!sameCapturedSnapshot(stored, snapshot))
+          throw new Error("Snapshot conflict for existing run");
+        this.#database.exec("COMMIT");
+        return existing;
+      }
+      const target = this.getRun(request.runId);
+      this.#database
+        .prepare(
+          `INSERT INTO snapshots (
+             run_id, base_sha, head_sha, merge_base_sha,
+             coverage_omissions_json, created_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          request.runId,
+          target.baseSha,
+          target.headSha,
+          snapshot.mergeBaseSha,
+          JSON.stringify(snapshot.coverageOmissions),
+          request.capturedAtMs,
+        );
+      const insertFile = this.#database.prepare(
+        `INSERT INTO snapshot_files (
+           run_id, path, status, changed_lines_json, patch, context_text,
+           omission_reason, ordinal, file_kind
+         ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+      );
+      for (const file of snapshot.files) {
+        insertFile.run(
+          request.runId,
+          file.path,
+          file.status,
+          JSON.stringify(file.kind === "reviewable" ? file.changedLines : []),
+          file.kind === "reviewable" ? file.patch : null,
+          file.kind === "omitted" ? file.reason : null,
+          file.ordinal,
+          file.kind,
+        );
+      }
+      const persisted = this.getSnapshot(request.runId);
+      if (persisted === null) throw new Error("Snapshot commit failed");
+      this.#database.exec("COMMIT");
+      return persisted;
+    } catch (error: unknown) {
+      if (this.#database.inTransaction) this.#database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   public claimNext(
@@ -184,6 +446,25 @@ export class SqliteRunStore {
       .run(request.nowMs, request.runId, request.workerId);
     if (result.changes !== 1)
       throw new Error("Cannot complete lease: lease owner does not match");
+  }
+
+  public failLease(
+    request: Readonly<{
+      runId: RunId;
+      workerId: WorkerId;
+      nowMs: number;
+      reason: string;
+    }>,
+  ): void {
+    const result = this.#database
+      .prepare(
+        `UPDATE review_runs
+         SET state = 'failed', failure_reason = ?, lease_owner = NULL, lease_expires_at_ms = NULL
+         WHERE run_id = ? AND lease_owner = ?`,
+      )
+      .run(request.reason.slice(0, 2_000), request.runId, request.workerId);
+    if (result.changes !== 1)
+      throw new Error("Cannot fail lease: lease owner does not match");
   }
 
   public reserveBudget(
@@ -262,6 +543,38 @@ export class SqliteRunStore {
     };
   }
 
+  public settleBudget(
+    request: Readonly<{
+      runId: RunId;
+      key: string;
+      actualAmount: UsdMicros;
+      settledAtMs: number;
+    }>,
+  ): void {
+    const reservation = this.#database
+      .prepare(
+        "SELECT reserved_micros FROM budget_reservations WHERE run_id = ? AND reservation_key = ?",
+      )
+      .get(request.runId, request.key);
+    if (reservation === undefined)
+      throw new Error("Budget reservation not found");
+    const reserved = reservationRowSchema.parse(reservation).reserved_micros;
+    if (request.actualAmount > reserved)
+      throw new Error("Settled amount exceeds reservation");
+    this.#database
+      .prepare(
+        `UPDATE budget_reservations
+         SET settled_micros = ?, settled_at_ms = ?
+         WHERE run_id = ? AND reservation_key = ?`,
+      )
+      .run(
+        request.actualAmount,
+        request.settledAtMs,
+        request.runId,
+        request.key,
+      );
+  }
+
   #insertDelivery(
     input: Readonly<{ deliveryId: string; runId: RunId; receivedAtMs: number }>,
   ): void {
@@ -272,3 +585,11 @@ export class SqliteRunStore {
       .run(input.deliveryId, input.runId, input.receivedAtMs);
   }
 }
+
+const parseJson = (value: string): unknown => {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    throw new Error("Invalid persisted JSON");
+  }
+};

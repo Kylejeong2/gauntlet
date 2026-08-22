@@ -5,7 +5,7 @@ import {
   verifyWebhookSignature,
   type PullRequestApi,
 } from "../src/adapters/github.js";
-import { commitSha, findingId, reviewerId } from "../src/domain/ids.js";
+import { commitSha, findingId, reviewerId, runId } from "../src/domain/ids.js";
 
 describe("webhook authentication", () => {
   it("accepts only a matching sha256 signature", () => {
@@ -25,21 +25,35 @@ describe("GitHub review delivery", () => {
       .mockResolvedValue({
         data: { id: 99 },
       });
-    const api: PullRequestApi = {
-      listFiles: () =>
-        Promise.resolve({
-          data: [
+    const compareCommits = vi
+      .fn<PullRequestApi["compareCommits"]>()
+      .mockResolvedValue({
+        data: {
+          base_commit: { sha: "a".repeat(40) },
+          merge_base_commit: { sha: "c".repeat(40) },
+          files: [
             {
               filename: "src/index.ts",
               status: "modified",
               patch: "@@ -1 +1,2 @@\n old\n+new",
             },
           ],
+        },
+      });
+    const api: PullRequestApi = {
+      getPull: () =>
+        Promise.resolve({
+          data: {
+            head: { sha: "b".repeat(40) },
+            repository: { id: 2, private: false },
+          },
         }),
+      compareCommits,
       listReviewComments: () =>
         Promise.resolve({
           data: [{ body: "<!-- gauntlet:already-seen -->" }],
         }),
+      listReviews: () => Promise.resolve({ data: [] }),
       createReview,
     };
     const client = new GitHubReviewClient(api, {
@@ -48,13 +62,29 @@ describe("GitHub review delivery", () => {
       pullNumber: 1,
     });
     const snapshot = await client.snapshot({
+      installationId: 1,
+      repositoryId: 2,
+      runId: runId("run-snapshot"),
       baseSha: commitSha("a".repeat(40)),
       headSha: commitSha("b".repeat(40)),
     });
-    expect(snapshot.changedLines).toEqual([
-      { path: "src/index.ts", lines: [2] },
+    expect(snapshot.mergeBaseSha).toBe(commitSha("c".repeat(40)));
+    expect(snapshot.files).toEqual([
+      {
+        ordinal: 0,
+        kind: "reviewable",
+        path: "src/index.ts",
+        status: "modified",
+        patch: "@@ -1 +1,2 @@\n old\n+new",
+        changedLines: [2],
+      },
     ]);
-    expect(snapshot.priorStableIdentities).toEqual(["already-seen"]);
+    expect(compareCommits).toHaveBeenCalledWith({
+      owner: "Kylejeong2",
+      repo: "gauntlet",
+      basehead: `${"a".repeat(40)}...${"b".repeat(40)}`,
+    });
+    expect(await client.priorStableIdentities()).toEqual(["already-seen"]);
 
     const publication = await client.publish({
       kind: "publish",
@@ -95,5 +125,29 @@ describe("GitHub review delivery", () => {
         },
       ],
     });
+  });
+
+  it("reconciles a previously submitted run after a crash", async () => {
+    const api: PullRequestApi = {
+      getPull: () => Promise.reject(new Error("must not capture")),
+      compareCommits: () => Promise.reject(new Error("must not capture")),
+      listReviewComments: () => Promise.resolve({ data: [] }),
+      listReviews: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 77,
+              body: "## Gauntlet review\n\n<!-- gauntlet-run:run-1 -->",
+            },
+          ],
+        }),
+      createReview: () => Promise.reject(new Error("must not publish")),
+    };
+    const client = new GitHubReviewClient(api, {
+      owner: "Kylejeong2",
+      repository: "gauntlet",
+      pullNumber: 1,
+    });
+    expect(await client.findExisting(runId("run-1"))).toEqual({ reviewId: 77 });
   });
 });

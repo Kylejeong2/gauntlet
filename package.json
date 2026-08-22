@@ -7,8 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "probot run ./dist/app.js",
-    "dev": "pnpm build && probot run ./dist/app.js",
+    "start": "node ./dist/server.js",
+    "dev": "pnpm build && pnpm start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
@@ -20,6 +20,7 @@
   "dependencies": {
     "@sailresearch/sdk": "^0.9.0",
     "better-sqlite3": "^12.2.0",
+    "pino": "^10.3.1",
     "probot": "^14.3.2",
     "zod": "^4.1.5"
   },

@@ -34,7 +34,7 @@ The local price estimate uses $0.09 per million input tokens and $0.18 per milli
 
 Each run creates one size `s` Sailbox with 2 GiB of memory and 8 GiB of disk, the minimums enforced by SDK 0.9.0 on 2026-08-22. Gauntlet clones only a public HTTPS repository, fetches the exact base and head SHAs, and checks out the head in detached mode.
 
-Repository commands use argument arrays, explicit working directories, empty environment overlays, timeouts, and bounded captured output. Installation uses `pnpm install --frozen-lockfile --ignore-scripts`. Tests execute only inside the Sailbox. The box terminates in a `finally` path after success or failure.
+Repository commands use argument arrays, explicit working directories, empty environment overlays, timeouts, and bounded captured output. Lockfile discovery selects pnpm, npm, or Yarn. Installation uses the matching frozen or immutable mode with lifecycle and build scripts disabled. Gauntlet reads the checked-out `package.json` through `git show` and schedules only scripts that exist. It recognizes `test`, `lint`, `typecheck`, `type-check`, `build`, `docs:build`, `build:docs`, and `docs`. A missing or malformed manifest does not create a guessed script command. The box terminates in a `finally` path after success or failure.
 
 The ledger reserves $0.01 for the bounded Sailbox lifecycle. This is intentionally conservative and is reported as an estimate rather than settled billing.
 

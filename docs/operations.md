@@ -21,7 +21,7 @@ Stop the process with a normal termination signal. Do not delete a live SQLite d
 
 ## Failure handling
 
-Provider rejection, response timeout, malformed JSON, missing reports, challenge failure, budget denial, sandbox setup failure, command setup failure, off-head publication rejection, and GitHub API failure all fail closed. The handler logs an identifier-scoped error and returns failure to GitHub. It never publishes a partial scorecard or unchallenged finding.
+Provider rejection, response timeout, malformed JSON, missing reports, challenge failure, budget denial, sandbox setup failure, command setup failure, off-head publication rejection, and GitHub API failure all fail closed. The worker logs an identifier-scoped error and records a failed terminal state. The authenticated webhook has already been durably accepted, so it does not remain open while inference runs. Gauntlet never publishes a partial scorecard or unchallenged finding.
 
 Sail 429 and 5xx responses are retried with delays of 1, 3, and 7 seconds. Other 4xx responses are not retried. The model is never substituted.
 
@@ -30,6 +30,8 @@ Sail 429 and 5xx responses are retried with delays of 1, 3, and 7 seconds. Other
 `delivery_id` is unique. The tuple `(installation_id, repository_id, pull_number, head_sha)` is also unique. Replayed delivery IDs and separate deliveries for the same head are acknowledged without a second run. A new head SHA creates a new run.
 
 Stable identities embedded as `<!-- gauntlet:identity -->` are read from existing review comments. The next head suppresses an equivalent finding instead of repeating it.
+
+Run markers embedded as `<!-- gauntlet-run:run-id -->` reconcile publication after a crash. A recovered lease checks existing reviews before submission and reuses the matching GitHub review ID.
 
 ## Incident checklist
 

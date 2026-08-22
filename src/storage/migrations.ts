@@ -136,6 +136,16 @@ const migrations: readonly string[] = [
     CREATE INDEX findings_run ON findings(run_id);
     CREATE INDEX run_events_run ON run_events(run_id, event_id);
   `,
+  `
+    ALTER TABLE review_runs ADD COLUMN owner TEXT;
+    ALTER TABLE review_runs ADD COLUMN repository_name TEXT;
+    ALTER TABLE review_runs ADD COLUMN base_sha TEXT;
+  `,
+  `
+    ALTER TABLE snapshot_files ADD COLUMN ordinal INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE snapshot_files ADD COLUMN file_kind TEXT NOT NULL DEFAULT 'reviewable';
+    CREATE UNIQUE INDEX snapshot_files_ordinal ON snapshot_files(run_id, ordinal);
+  `,
 ];
 
 export const migrate = (database: Database.Database): void => {

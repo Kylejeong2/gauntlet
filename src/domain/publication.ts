@@ -120,6 +120,6 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     input.coverageOmissions.length === 0
       ? "None"
       : input.coverageOmissions.join("; ");
-  const body = `## Gauntlet review\n\n${scorecard(selectedReports)}\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${String(input.durationMs)}ms\nVerified findings: ${String(comments.length)}`;
+  const body = `## Gauntlet review\n\n${scorecard(selectedReports)}\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${String(input.durationMs)}ms\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return { kind: "publish", headSha: input.headSha, body, comments };
 };

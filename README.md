@@ -6,9 +6,9 @@ The product goal is strict. Every visible finding must survive a separate challe
 
 ## Current status
 
-Gauntlet has a working local implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The local gate currently covers domain, SQLite, GitHub payload, Sail request, Sailbox lifecycle, orchestration, challenge, and publication policy contracts.
+Gauntlet has a working local implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The local gate covers domain, SQLite, GitHub payload, exact-SHA snapshots, Sail requests, Sailbox lifecycle, orchestration, challenges, redacted logging, and publication policy contracts.
 
-Live verification on 2026-08-22 created a size `s` Sailbox, executed a credential-free argument-vector command, and terminated it. Sail accepted the current DeepSeek V4 Flash request contract with `metadata.completion_window: "asap"`; one request completed with a reviewer-identity mismatch that is now prevented by provider JSON Schema, while a later request exceeded the bounded response timeout during provider capacity pressure. A completed valid inference response and the installed GitHub App flow remain explicit live gates. Gauntlet never silently switches models.
+Live verification on 2026-08-22 created a size `s` Sailbox, executed a credential-free argument-vector command, and terminated it. Sail also completed a schema-valid DeepSeek V4 Flash review through the production client with response ID `resp_01a028bf-4ab0-7115-900a-2476a057eaa2`, readiness 4, zero findings, and an estimated cost of 68 microdollars. The installed GitHub App flow remains the final live gate. Gauntlet never silently switches models.
 
 ## Reviewers
 
@@ -43,8 +43,8 @@ The implemented publication reducer enforces these rules without provider or Git
 
 ## How a review works
 
-1. The GitHub App verifies and durably records the webhook.
-2. The handler captures the exact base, head, patch snapshot, and right-side changed lines.
+1. Probot verifies the signature, and the handler durably records the delivery decision.
+2. A leased worker compares the exact base and head SHAs, then stores and reloads the merge base, patches, right-side changed lines, and coverage omissions.
 3. The planner reserves the full worst-case run under $0.25.
 4. Gauntlet creates one credential-free Sailbox and checks out the exact public head SHA.
 5. Repository setup and standard checks run with bounded time and output.
@@ -64,7 +64,7 @@ Reviewers cannot run an unrestricted shell. The first implementation uses a fixe
 
 Private repositories are outside the first release. Gauntlet rejects them before inference or code execution.
 
-The full threat model and operating controls will live in `docs/security.md` as the implementation lands.
+Read [the security model](docs/security.md) for the full threat model, credential boundary, and operating controls.
 
 ## Cost limit
 
@@ -93,6 +93,7 @@ specs/             Product intent and acceptance criteria.
 - [Architecture](docs/architecture.md) explains the runtime and data model.
 - [Architecture comparison rubric](docs/architecture/arena-rubric.md) records how competing designs were judged.
 - [Decision 0001](docs/decisions/0001-durable-run-model.md) records the chosen durability model.
+- [Decision 0002](docs/decisions/0002-exact-pull-request-snapshots.md) records the exact-SHA snapshot boundary.
 - [Prior art](docs/research/prior-art.md) traces the inspected PR-AF, PR-Agent, CodeRabbit, Sail, and Sailbox sources.
 - [GitHub App setup](docs/setup.md) lists permissions, events, local webhook forwarding, and startup.
 - [Configuration](docs/configuration.md) defines environment, model, Sailbox, and budget contracts.
@@ -100,6 +101,7 @@ specs/             Product intent and acceptance criteria.
 - [Security model](docs/security.md) documents hostile-code isolation, credentials, validation, and limitations.
 - [Operations](docs/operations.md) covers run sequence, failures, duplicates, and incident handling.
 - [Testing](docs/testing.md) lists the local gates and the acceptance criteria covered by the current suites.
+- [Acceptance status](docs/acceptance-status.md) maps each ProductSpec criterion to current evidence and remaining live gates.
 
 ## Development contract
 

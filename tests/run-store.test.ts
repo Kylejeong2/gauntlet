@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   deliveryId,
+  commitSha,
   installationId,
   pullNumber,
   repositoryId,
@@ -11,6 +12,7 @@ import {
 } from "../src/domain/ids.js";
 import { migrate } from "../src/storage/migrations.js";
 import { SqliteRunStore } from "../src/storage/run-store.js";
+import type { CapturedPullRequestSnapshot } from "../src/domain/snapshot.js";
 
 describe("SQLite RunStore", () => {
   let database: Database.Database;
@@ -30,7 +32,7 @@ describe("SQLite RunStore", () => {
     migrate(database);
     expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(database.pragma("journal_mode", { simple: true })).toBe("memory");
-    expect(database.pragma("user_version", { simple: true })).toBe(1);
+    expect(database.pragma("user_version", { simple: true })).toBe(3);
   });
 
   const request = (headSha = "a".repeat(40), delivery = "delivery-1") => ({
@@ -39,6 +41,9 @@ describe("SQLite RunStore", () => {
     installationId: installationId(1),
     repositoryId: repositoryId(2),
     pullNumber: pullNumber(3),
+    owner: "Kylejeong2",
+    repository: "gauntlet",
+    baseSha: commitSha("0".repeat(40)),
     headSha,
     receivedAtMs: 100,
   });
@@ -68,6 +73,104 @@ describe("SQLite RunStore", () => {
       runId: runId("run-bbbbbbb"),
     });
     expect(store.countRuns()).toBe(2);
+  });
+
+  it("records an ineligible signed delivery without creating a run", () => {
+    expect(
+      store.recordIneligibleDelivery({
+        deliveryId: deliveryId("ignored-1"),
+        reason: "bot_authored_pull_request",
+        receivedAtMs: 100,
+      }),
+    ).toEqual({ kind: "recorded", reason: "bot_authored_pull_request" });
+    expect(
+      store.recordIneligibleDelivery({
+        deliveryId: deliveryId("ignored-1"),
+        reason: "private_repository",
+        receivedAtMs: 101,
+      }),
+    ).toEqual({
+      kind: "duplicate_delivery",
+      reason: "bot_authored_pull_request",
+    });
+    expect(store.countRuns()).toBe(0);
+  });
+
+  it("persists the immutable target needed for crash recovery", () => {
+    store.acceptRun(request());
+    expect(store.getRun(runId("run-aaaaaaa"))).toEqual({
+      runId: runId("run-aaaaaaa"),
+      installationId: installationId(1),
+      repositoryId: repositoryId(2),
+      pullNumber: pullNumber(3),
+      owner: "Kylejeong2",
+      repository: "gauntlet",
+      baseSha: commitSha("0".repeat(40)),
+      headSha: commitSha("a".repeat(40)),
+    });
+  });
+
+  it("puts one normalized snapshot and reloads the exact target", () => {
+    store.acceptRun(request());
+    const snapshot: CapturedPullRequestSnapshot = {
+      formatVersion: 1,
+      mergeBaseSha: commitSha("f".repeat(40)),
+      files: [
+        {
+          ordinal: 0,
+          kind: "reviewable",
+          path: "src/index.ts",
+          status: "modified",
+          patch: "@@ -1 +1 @@\n-old\n+new",
+          changedLines: [1],
+        },
+        {
+          ordinal: 1,
+          kind: "omitted",
+          path: "image.png",
+          status: "modified",
+          reason: "patch_unavailable",
+        },
+      ],
+      coverageOmissions: ["image.png: GitHub did not provide a patch"],
+    };
+    const persisted = store.putSnapshotOnce({
+      runId: runId("run-aaaaaaa"),
+      snapshot,
+      capturedAtMs: 500,
+    });
+    expect(persisted).toMatchObject({
+      persisted: true,
+      runId: runId("run-aaaaaaa"),
+      installationId: installationId(1),
+      repositoryId: repositoryId(2),
+      pullNumber: pullNumber(3),
+      owner: "Kylejeong2",
+      repository: "gauntlet",
+      baseSha: commitSha("0".repeat(40)),
+      headSha: commitSha("a".repeat(40)),
+      mergeBaseSha: commitSha("f".repeat(40)),
+      capturedAtMs: 500,
+      files: snapshot.files,
+    });
+    expect(store.getSnapshot(runId("run-aaaaaaa"))).toEqual(persisted);
+    expect(
+      store.putSnapshotOnce({
+        runId: runId("run-aaaaaaa"),
+        snapshot,
+        capturedAtMs: 600,
+      }),
+    ).toEqual(persisted);
+    expect(() =>
+      store.putSnapshotOnce({
+        runId: runId("run-aaaaaaa"),
+        snapshot: {
+          ...snapshot,
+          mergeBaseSha: commitSha("e".repeat(40)),
+        },
+        capturedAtMs: 700,
+      }),
+    ).toThrow("Snapshot conflict");
   });
 
   it("claims one lease per run, recovers expired leases, and rejects stale completion", () => {
@@ -143,5 +246,22 @@ describe("SQLite RunStore", () => {
       settled: usdMicros(0),
       remaining: usdMicros(50_000),
     });
+    store.settleBudget({
+      runId: runId("run-aaaaaaa"),
+      key: "reviewer:security:1",
+      actualAmount: usdMicros(123),
+      settledAtMs: 2_000,
+    });
+    expect(store.getBudgetSummary(runId("run-aaaaaaa")).settled).toBe(
+      usdMicros(123),
+    );
+    expect(() => {
+      store.settleBudget({
+        runId: runId("run-aaaaaaa"),
+        key: "reviewer:security:1",
+        actualAmount: usdMicros(200_001),
+        settledAtMs: 2_001,
+      });
+    }).toThrow("exceeds reservation");
   });
 });

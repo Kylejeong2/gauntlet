@@ -31,7 +31,27 @@ export type ReviewRunInput = Readonly<{
 
 type Costed<T> = Readonly<{ cost: UsdMicros }> & T;
 
+export type ReviewAuditEvent =
+  | Readonly<{ kind: "sandbox_prepared"; sailboxId: string }>
+  | Readonly<{
+      kind: "reviewer_completed";
+      reviewer: ReviewerDefinition["id"];
+      readiness: number;
+      findingCount: number;
+      cost: UsdMicros;
+    }>
+  | Readonly<{
+      kind: "challenge_completed";
+      findingId: CandidateFinding["id"];
+      outcome: ChallengeVerdict["kind"];
+      cost: UsdMicros;
+    }>
+  | Readonly<{ kind: "publication_reconciled"; reviewId: number }>
+  | Readonly<{ kind: "publication_submitted"; reviewId: number }>
+  | Readonly<{ kind: "sandbox_terminated"; sailboxId: string }>;
+
 export type ReviewPorts = Readonly<{
+  audit?: (event: ReviewAuditEvent) => void;
   sandbox: Readonly<{
     prepare: (input: ReviewRunInput) => Promise<SandboxHandle>;
     evidence?: (
@@ -59,6 +79,9 @@ export type ReviewPorts = Readonly<{
     ) => Promise<Costed<{ verdict: ChallengeVerdict }>>;
   }>;
   github: Readonly<{
+    findExisting?: (
+      runId: RunId,
+    ) => Promise<Readonly<{ reviewId: number }> | null>;
     publish: (
       plan: Extract<PublicationPlan, { kind: "publish" }>,
     ) => Promise<Readonly<{ reviewId: number }>>;
@@ -101,6 +124,7 @@ export const runReview = async (
     throw new Error("Worst-case review plan exceeds the budget");
   const startedAt = Date.now();
   const sandbox = await ports.sandbox.prepare(input);
+  ports.audit?.({ kind: "sandbox_prepared", sailboxId: sandbox.id });
   let cost = usdMicros(0);
   const addCost = (amount: UsdMicros): void => {
     const next = usdMicros(cost + amount);
@@ -134,6 +158,15 @@ export const runReview = async (
         }),
     );
     for (const result of reviewResults) addCost(result.cost);
+    for (const result of reviewResults) {
+      ports.audit?.({
+        kind: "reviewer_completed",
+        reviewer: result.report.reviewer,
+        readiness: result.report.readiness,
+        findingCount: result.report.findings.length,
+        cost: result.cost,
+      });
+    }
     const reports = reviewResults.map((result) => result.report);
     const findings = reports.flatMap((report) => report.findings);
     const challengeResults = await mapConcurrent(findings, 2, async (finding) =>
@@ -144,6 +177,14 @@ export const runReview = async (
       }),
     );
     for (const result of challengeResults) addCost(result.cost);
+    for (const result of challengeResults) {
+      ports.audit?.({
+        kind: "challenge_completed",
+        findingId: result.verdict.findingId,
+        outcome: result.verdict.kind,
+        cost: result.cost,
+      });
+    }
     const challenges = challengeResults.map((result) => result.verdict);
     const plan = reducePublication({
       runId: input.runId,
@@ -159,10 +200,23 @@ export const runReview = async (
     });
     if (plan.kind !== "publish")
       throw new Error(`Publication refused: ${plan.reason}`);
-    const publication = await ports.github.publish(plan);
+    const existingPublication =
+      ports.github.findExisting === undefined
+        ? null
+        : await ports.github.findExisting(input.runId);
+    const publication =
+      existingPublication ?? (await ports.github.publish(plan));
+    ports.audit?.({
+      kind:
+        existingPublication === null
+          ? "publication_submitted"
+          : "publication_reconciled",
+      reviewId: publication.reviewId,
+    });
     return { reviewId: publication.reviewId, cost, reports, challenges };
   } finally {
     await ports.sandbox.terminate(sandbox);
+    ports.audit?.({ kind: "sandbox_terminated", sailboxId: sandbox.id });
   }
 };
 

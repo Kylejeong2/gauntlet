@@ -56,11 +56,36 @@ export type ChallengeRequest = Readonly<{
   toolEvidence: readonly string[];
 }>;
 
+export type SailModelAuditEvent =
+  | Readonly<{
+      kind: "model_request_started";
+      operation: "review" | "challenge";
+      correlationId: string;
+      model: string;
+    }>
+  | Readonly<{
+      kind: "model_request_retry";
+      operation: "review" | "challenge";
+      correlationId: string;
+      status: number;
+      attempt: number;
+    }>
+  | Readonly<{
+      kind: "model_request_completed";
+      operation: "review" | "challenge";
+      correlationId: string;
+      responseId: string;
+      inputTokens: number;
+      outputTokens: number;
+      cost: ReturnType<typeof usdMicros>;
+    }>;
+
 export class SailModelClient {
   readonly #apiKey: string;
   readonly #fetcher: typeof fetch;
   readonly #apiUrl: string;
   readonly #retryDelaysMs: readonly number[];
+  readonly #audit: (event: SailModelAuditEvent) => void;
 
   public constructor(
     options: Readonly<{
@@ -68,6 +93,7 @@ export class SailModelClient {
       fetcher?: typeof fetch;
       apiUrl?: string;
       retryDelaysMs?: readonly number[];
+      audit?: (event: SailModelAuditEvent) => void;
     }>,
   ) {
     if (options.apiKey.length === 0)
@@ -76,6 +102,11 @@ export class SailModelClient {
     this.#fetcher = options.fetcher ?? fetch;
     this.#apiUrl = options.apiUrl ?? SAIL_API_URL;
     this.#retryDelaysMs = options.retryDelaysMs ?? [1_000, 3_000, 7_000];
+    this.#audit =
+      options.audit ??
+      ((event) => {
+        void event;
+      });
   }
 
   public async review(request: ReviewerRequest): Promise<
@@ -100,6 +131,7 @@ export class SailModelClient {
       ].join("\n\n"),
       "reviewer_report",
       reviewerReportJsonSchema(request.reviewer),
+      { operation: "review", correlationId: request.reviewer },
     );
     const parsed = reviewerReportSchema.safeParse(JSON.parse(result.value));
     if (!parsed.success)
@@ -140,6 +172,7 @@ export class SailModelClient {
       ].join("\n\n"),
       "challenge_verdict",
       challengeJsonSchema,
+      { operation: "challenge", correlationId: request.finding.id },
     );
     const output = challengeOutputSchema.safeParse(JSON.parse(result.value));
     if (!output.success) throw new Error("Invalid Sail challenge response");
@@ -155,7 +188,16 @@ export class SailModelClient {
     prompt: string,
     schemaName: string,
     schema: Record<string, unknown>,
+    correlation: Readonly<{
+      operation: "review" | "challenge";
+      correlationId: string;
+    }>,
   ): Promise<ModelResult<string>> {
+    this.#audit({
+      kind: "model_request_started",
+      ...correlation,
+      model: SAIL_MODEL,
+    });
     const body = JSON.stringify({
       model: SAIL_MODEL,
       metadata: { completion_window: "asap" },
@@ -192,6 +234,12 @@ export class SailModelClient {
         throw new Error(
           `Sail request failed (${String(response.status)}): ${rawBody.slice(0, 500)}`,
         );
+      this.#audit({
+        kind: "model_request_retry",
+        ...correlation,
+        status: response.status,
+        attempt: attempt + 1,
+      });
       await wait(delay);
     }
     if (responseStatus < 200 || responseStatus >= 300)
@@ -203,15 +251,24 @@ export class SailModelClient {
       envelope.output_text ?? extractOutputText(envelope.output);
     if (outputText === undefined || outputText.length === 0)
       throw new Error("Sail response contained no output text");
+    const cost = estimateModelRequest({
+      inputTokens: envelope.usage.input_tokens,
+      outputTokens: envelope.usage.output_tokens,
+      inputUsdPerMillion: SAIL_INPUT_USD_PER_MILLION,
+      outputUsdPerMillion: SAIL_OUTPUT_USD_PER_MILLION,
+    });
+    this.#audit({
+      kind: "model_request_completed",
+      ...correlation,
+      responseId: envelope.id,
+      inputTokens: envelope.usage.input_tokens,
+      outputTokens: envelope.usage.output_tokens,
+      cost,
+    });
     return {
       value: outputText,
       responseId: envelope.id,
-      cost: estimateModelRequest({
-        inputTokens: envelope.usage.input_tokens,
-        outputTokens: envelope.usage.output_tokens,
-        inputUsdPerMillion: SAIL_INPUT_USD_PER_MILLION,
-        outputUsdPerMillion: SAIL_OUTPUT_USD_PER_MILLION,
-      }),
+      cost,
     };
   }
 }

@@ -42,7 +42,11 @@ describe("review orchestration", () => {
     const challenged: string[] = [];
     const publications: unknown[] = [];
     let terminated = false;
+    const auditEvents: string[] = [];
     const ports: ReviewPorts = {
+      audit: (event) => {
+        auditEvents.push(event.kind);
+      },
       sandbox: {
         prepare: () => Promise.resolve({ id: "box-1" }),
         terminate: () => {
@@ -103,6 +107,10 @@ describe("review orchestration", () => {
     expect(result.reviewId).toBe(42);
     expect(result.cost).toBe(usdMicros(850));
     expect(terminated).toBe(true);
+    expect(auditEvents).toContain("reviewer_completed");
+    expect(auditEvents).toContain("challenge_completed");
+    expect(auditEvents).toContain("publication_submitted");
+    expect(auditEvents.at(-1)).toBe("sandbox_terminated");
   });
 
   it("terminates the sandbox and publishes nothing when a reviewer fails", async () => {

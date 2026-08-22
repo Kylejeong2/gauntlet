@@ -1,0 +1,31 @@
+# ProductSpec acceptance status
+
+This reference maps [ProductSpec revision 1](../specs/gauntlet.product-spec.md) to current proof. `Local pass` means deterministic tests or a local production-server smoke prove the criterion. `Live pass` requires the installed GitHub App and a public pull request.
+
+| Criterion | Status                        | Evidence                                                                                                                                                                                                            |
+| --------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1      | Local pass, live pending      | `tests/run-store.test.ts`, `tests/github-contracts.test.ts`, and the signed Probot HTTP smoke cover accepted actions and duplicate suppression.                                                                     |
+| AC-2      | Local pass, live pending      | Complete payload classification covers private, draft, bot-authored, unsupported, malformed, and invalid-signature paths. Rejected signed deliveries store enum-only reasons.                                       |
+| AC-3      | Local pass, live pending      | `GitHubReviewClient.snapshot` compares literal base and head SHAs. `SqliteRunStore.putSnapshotOnce` stores and reloads the target, merge base, ordered files, changed lines, patches, and omissions.                |
+| AC-4      | Local pass                    | `tests/domain.test.ts` proves the eight core reviewers, two optional reviewers, and ten-reviewer ceiling.                                                                                                           |
+| AC-5      | Local pass, live pending      | Strict Zod and provider JSON Schemas require one 1-to-5 score, rationale, examined areas, and bounded findings per reviewer.                                                                                        |
+| AC-6      | Local pass, live pending      | The candidate-finding schema requires a changed location, trigger, severity, confidence, evidence, action, and stable identity.                                                                                     |
+| AC-7      | Local pass, live pending      | `tests/orchestrator.test.ts` proves one separate challenge call per candidate and fail-closed provider behavior.                                                                                                    |
+| AC-8      | Local pass, live pending      | `tests/policies.test.ts` proves exact-line validation, stable-identity suppression, deduplication, ranking, and the five-comment limit.                                                                             |
+| AC-9      | Local pass, live pending      | Publication tests prove one COMMENT review with scorecard, coverage, cost, duration, and only verified inline findings.                                                                                             |
+| AC-10     | Local pass, live pending      | Same-head delivery idempotency, new-head runs, prior stable identities, and the pre-publication head check prevent stale or repeated findings.                                                                      |
+| AC-11     | Local pass and provider smoke | Sailbox contract tests and the recorded live box prove public HTTPS clone, exact detached head, empty command environments, timeouts, cleanup, and termination.                                                     |
+| AC-12     | Local pass, live pending      | Sailbox tests prove lockfile-aware pnpm, npm, and Yarn installation plus manifest-aware test, lint, typecheck, build, and documentation commands without shell interpolation.                                       |
+| AC-13     | Local pass, provider smoke    | SQLite reserves the worst-case run before paid work. Provider usage settles the reservation in integer microdollars below the $0.25 ceiling.                                                                        |
+| AC-14     | Local pass, live pending      | Zod validates webhooks, model output, persisted rows, configuration, snapshots, and publication inputs at their boundaries.                                                                                         |
+| AC-15     | Local pass, live pending      | Structured events correlate run, reviewer, finding, challenge, model, Sailbox, command, and publication IDs. Canary tests and the HTTP smoke prove redaction.                                                       |
+| AC-16     | Local pass, live pending      | The 52-test gate covers unit, SQLite integration, provider contracts, fixture evals, lifecycle cleanup, rendering, and redaction. Installed-App E2E remains pending.                                                |
+| AC-17     | Local pass                    | The README links the architecture, setup, configuration, reviewer, security, operations, testing, research, decisions, and acceptance references. `pnpm check` validates the documented clean-checkout command set. |
+
+## AI evaluation status
+
+| Evaluation | Status                                   | Evidence                                                                                                                                          |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EVAL-1     | Deterministic fixture pass, live pending | The reducer publishes a confirmed command injection on a valid changed line. Public PR #1 is the installed-App fixture.                           |
+| EVAL-2     | Deterministic fixture pass, live pending | The reducer suppresses a disproved finding and publishes a scorecard without positive inline comments. Public PR #2 is the installed-App control. |
+| EVAL-3     | Deterministic fixture pass               | Policy tests remove duplicates and invalid locations before the five-finding ceiling.                                                             |

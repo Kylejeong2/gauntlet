@@ -6,7 +6,7 @@ Status: accepted design for ProductSpec revision 1. Implementation and live veri
 
 The implementation provides the SDK-independent domain and SQLite foundation described here: branded boundary constructors, discriminated run states, the ten-entry reviewer registry, strict reviewer and finding schemas, the integer-microdollar budget policy, the pure challenge-gated publication reducer, structured-value redaction, `deriveNextWork`, direct migrations, and durable acceptance, lease, and budget-reservation operations.
 
-Concrete adapters now cover public GitHub patch snapshots and one-review publication, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, runs reviewer and challenge calls with concurrency two, reduces results, publishes once, and terminates the box. The current service invokes that flow from the authenticated webhook handler. A separate crash-recovery worker and a completed installed-App live flow remain future gates. The exact current evidence is documented in [Testing Gauntlet](testing.md).
+Concrete adapters now cover public GitHub exact-SHA comparison, immutable snapshot persistence, one-review publication, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, runs reviewer and challenge calls with concurrency two, reduces results, publishes once, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run markers reconcile publication after a crash. A completed installed-App live flow remains the final product gate. [Testing Gauntlet](testing.md) records the current evidence.
 
 ## What Gauntlet does
 
@@ -102,6 +102,8 @@ The immutable snapshot records these facts:
 - Files or context omitted because of size, binary content, a missing GitHub patch, or the cost limit.
 
 Gauntlet does not recompute the snapshot after reviewer work starts.
+
+The GitHub adapter calls the commit-comparison endpoint with the accepted base and head SHAs. It does not call the mutable pull-request files endpoint. `SqliteRunStore.putSnapshotOnce` writes the header and ordered files in one transaction. The worker reloads the stored value before reviewer selection, Sailbox creation, or model inference. The 300-file comparison limit becomes an explicit coverage omission.
 
 ## Run lifecycle
 
@@ -251,7 +253,7 @@ The planner does not start a partial organization. If the full worst-case plan c
 
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
 
-The GitHub adapter creates one pending review, persists its GitHub ID, adds validated comments, and submits it. If GitHub rejects a comment location, the adapter refetches the same head, removes only invalid locations, and submits the remaining review. It never falls back to a visible flood of individual comments.
+The GitHub adapter checks the current head, then creates one COMMENT review with all validated comments. A hidden run marker lets a recovered worker find a review that GitHub accepted before the local completion write. The adapter never falls back to a visible flood of individual comments.
 
 ## Ports
 

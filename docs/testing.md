@@ -30,11 +30,11 @@ The domain tests cover the eight mandatory and two optional reviewer definitions
 
 The pure-policy tests cover conservative integer-microdollar estimates, the $0.25 reservation ceiling, challenge failure closure, exact changed-line validation, stable-identity suppression, deterministic deduplication and ranking, the five-comment ceiling, sensitive-value redaction, and deterministic scheduling. These checks map to AC-7, AC-8, AC-10, AC-13, and AC-15.
 
-The SQLite integration tests execute direct migrations against a real in-memory SQLite database. They cover duplicate deliveries, same-target delivery idempotency, new-head runs, lease exclusion, expired-lease recovery, stale-owner rejection, idempotent budget reservation, and overflow denial. These checks map to AC-1, AC-10, AC-13, AC-14, and the applicable SQLite layer of AC-16.
+The SQLite integration tests execute direct migrations against a real in-memory SQLite database. They cover duplicate deliveries, rejected-delivery reasons, same-target delivery idempotency, new-head runs, immutable snapshot put and reload, snapshot conflicts, lease exclusion, expired-lease recovery, stale-owner rejection, idempotent budget reservation, and overflow denial. These checks map to AC-1, AC-2, AC-3, AC-10, AC-13, AC-14, and the applicable SQLite layer of AC-16.
 
 ## Provider and orchestration contracts
 
-The GitHub suites cover event eligibility, public-only and draft filtering, unified-patch right-side line extraction, constant-time webhook signature verification, bounded pagination, prior stable-marker extraction, exact-head COMMENT review rendering, and one-call publication.
+The GitHub suites cover complete event classification, public-only, draft, bot, and unsupported-action filtering, unified-patch right-side line extraction, constant-time webhook signature verification, exact-SHA comparison, merge-base capture, bounded pagination, prior stable-marker extraction, exact-head COMMENT review rendering, and one-call publication.
 
 The Sail suites assert the DeepSeek V4 Flash model slug, `metadata.completion_window: "asap"`, disabled storage, strict output parsing, integer-microdollar token accounting, bounded transient retry, malformed-response failure, and reviewer identity preservation.
 
@@ -48,9 +48,13 @@ These tests extend coverage through AC-1 to AC-11, AC-13 to AC-15, and the imple
 
 On 2026-08-22, the Sail SDK 0.9.0 live smoke created size `s` Sailbox `sb_32526880-0867-48e4-a173-69fdb5b4e91f` with 2 GiB memory and 8 GiB disk, executed `uname -s` with an empty environment overlay, observed exit code 0 and `Linux`, and terminated the same ID. Earlier attempts failed locally before allocation and established the provider-enforced size minimums.
 
-The live DeepSeek smoke established the current request contract. Sail rejected the obsolete `service_tier` field, accepted `metadata.completion_window: "asap"`, returned one structurally valid response with a noncanonical reviewer identity, and later experienced rate limiting and a bounded timeout. The production schema now fixes reviewer identity with `const`, and transient 429/5xx responses retry without changing models. A completed response passing the final schema remains an open live gate.
+The live DeepSeek smoke established the current request contract. Sail rejected the obsolete `service_tier` field, accepted `metadata.completion_window: "asap"`, and exposed reviewer identity drift, rate limiting, and slow capacity before the client was hardened. The final production call completed with response ID `resp_01a028bf-4ab0-7115-900a-2476a057eaa2`, a schema-valid security score of 4, zero findings, and an estimated cost of 68 microdollars. The production schema fixes reviewer identity with `const`, and transient 429/5xx responses retry without changing models.
 
-The GitHub App creation, installation, webhook delivery, visible review, stable-marker update, and CI check run remain open live gates. They require persistent repository access and are performed only with user confirmation at the GitHub action boundary.
+The first GitHub Actions CI run passed dependency installation and `pnpm check` in 31 seconds. Two public fixture PRs then passed CI: the command-injection fixture after its source moved under the TypeScript project, and the documentation-only control fixture on its first run.
+
+A local production-server smoke sent pull-request payloads through Probot's real HTTP route after the exact-snapshot change. An invalid HMAC returned 400. A valid eligible payload returned 200 in 3.4 ms and persisted one run before background processing. A valid unsupported action returned 200 in 1.6 ms and persisted `unsupported_action` without a run. The intentionally fake installation then failed cleanly in the worker. The captured log contained nine `[REDACTED]` markers and contained neither the JSON webhook body nor the invalid signature. A unit contract preserves the nested Probot error shapes that required redaction.
+
+GitHub App creation, installation, live webhook delivery, visible review, and stable-marker update remain open live gates. They require persistent repository access and are performed only with user confirmation at the GitHub action boundary.
 
 ## TDD evidence
 

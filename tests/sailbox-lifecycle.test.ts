@@ -19,7 +19,22 @@ describe("Sailbox lifecycle", () => {
       id: "box-1",
       run: (argv, options) => {
         commands.push({ argv: [...argv], ...options });
-        return Promise.resolve({ exitCode: 0, stdout: "ok", stderr: "" });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout:
+            argv[0] === "git" && argv[1] === "ls-files"
+              ? "package.json\npnpm-lock.yaml\n"
+              : argv[0] === "git" && argv[1] === "show"
+                ? JSON.stringify({
+                    scripts: {
+                      test: "vitest run",
+                      lint: "eslint .",
+                      "docs:build": "typedoc",
+                    },
+                  })
+                : "ok",
+          stderr: "",
+        });
       },
       terminate: () => {
         terminated = true;
@@ -73,6 +88,7 @@ describe("Sailbox lifecycle", () => {
     ]);
     await environment.evidence(handle, reviewerId("security"));
     await environment.evidence(handle, reviewerId("edge-cases"));
+    await environment.evidence(handle, reviewerId("documentation"));
     expect(
       commands.filter((command) =>
         command.argv.join(" ").includes("pnpm install"),
@@ -83,6 +99,16 @@ describe("Sailbox lifecycle", () => {
         (command) => command.argv.join(" ") === "corepack pnpm test",
       ),
     ).toHaveLength(1);
+    expect(
+      commands.filter(
+        (command) => command.argv.join(" ") === "corepack pnpm run docs:build",
+      ),
+    ).toHaveLength(1);
+    expect(
+      commands.some((command) =>
+        command.argv.join(" ").includes("pnpm typecheck"),
+      ),
+    ).toBe(false);
     await environment.terminate(handle);
     expect(terminated).toBe(true);
   });

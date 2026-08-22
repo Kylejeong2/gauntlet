@@ -1,7 +1,21 @@
 import { z } from "zod";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { CommitSha } from "../domain/ids.js";
+import {
+  commitSha,
+  installationId,
+  pullNumber,
+  repositoryId,
+  type CommitSha,
+  type InstallationId,
+  type PullNumber,
+  type RepositoryId,
+  type RunId,
+} from "../domain/ids.js";
 import type { PublicationPlan } from "../domain/publication.js";
+import {
+  capturedPullRequestSnapshotSchema,
+  type CapturedPullRequestSnapshot,
+} from "../domain/snapshot.js";
 
 const supportedActions = new Set([
   "opened",
@@ -12,18 +26,81 @@ const supportedActions = new Set([
 
 const pullRequestEventSchema = z.looseObject({
   action: z.string(),
-  repository: z.looseObject({ private: z.boolean() }),
-  pull_request: z.looseObject({ draft: z.boolean() }),
+  installation: z.looseObject({ id: z.number().int().positive() }),
+  repository: z.looseObject({
+    id: z.number().int().positive(),
+    private: z.boolean(),
+    name: z.string().trim().min(1),
+    owner: z.looseObject({ login: z.string().trim().min(1) }),
+  }),
+  pull_request: z.looseObject({
+    number: z.number().int().positive(),
+    draft: z.boolean(),
+    base: z.looseObject({ sha: z.string() }),
+    head: z.looseObject({ sha: z.string() }),
+    user: z.looseObject({
+      login: z.string().trim().min(1),
+      type: z.string().trim().min(1),
+    }),
+  }),
 });
 
-export const isReviewablePullRequest = (payload: unknown): boolean => {
+export type PullRequestIneligibleReason =
+  | "unsupported_action"
+  | "private_repository"
+  | "draft_pull_request"
+  | "bot_authored_pull_request"
+  | "malformed_payload";
+
+export type PullRequestEligibility =
+  | Readonly<{
+      kind: "eligible";
+      target: Readonly<{
+        installationId: InstallationId;
+        repositoryId: RepositoryId;
+        pullNumber: PullNumber;
+        owner: string;
+        repository: string;
+        baseSha: CommitSha;
+        headSha: CommitSha;
+      }>;
+    }>
+  | Readonly<{ kind: "ineligible"; reason: PullRequestIneligibleReason }>;
+
+export const classifyPullRequest = (
+  payload: unknown,
+): PullRequestEligibility => {
   const parsed = pullRequestEventSchema.safeParse(payload);
-  return (
-    parsed.success &&
-    supportedActions.has(parsed.data.action) &&
-    !parsed.data.repository.private &&
-    !parsed.data.pull_request.draft
-  );
+  if (!parsed.success)
+    return { kind: "ineligible", reason: "malformed_payload" };
+  const event = parsed.data;
+  if (!supportedActions.has(event.action))
+    return { kind: "ineligible", reason: "unsupported_action" };
+  if (event.repository.private)
+    return { kind: "ineligible", reason: "private_repository" };
+  if (event.pull_request.draft)
+    return { kind: "ineligible", reason: "draft_pull_request" };
+  if (
+    event.pull_request.user.type.toLowerCase() === "bot" ||
+    event.pull_request.user.login.toLowerCase().endsWith("[bot]")
+  )
+    return { kind: "ineligible", reason: "bot_authored_pull_request" };
+  try {
+    return {
+      kind: "eligible",
+      target: {
+        installationId: installationId(event.installation.id),
+        repositoryId: repositoryId(event.repository.id),
+        pullNumber: pullNumber(event.pull_request.number),
+        owner: event.repository.owner.login,
+        repository: event.repository.name,
+        baseSha: commitSha(event.pull_request.base.sha),
+        headSha: commitSha(event.pull_request.head.sha),
+      },
+    };
+  } catch {
+    return { kind: "ineligible", reason: "malformed_payload" };
+  }
 };
 
 export const parseChangedRightLines = (
@@ -71,17 +148,34 @@ type PullFile = Readonly<{
 }>;
 
 type ReviewComment = Readonly<{ body?: string | null }>;
+type PullReview = Readonly<{ id: number; body?: string | null }>;
+
+type PullDetails = Readonly<{
+  head: Readonly<{ sha: string }>;
+  repository: Readonly<{ id: number; private: boolean }>;
+}>;
+
+type CompareDetails = Readonly<{
+  base_commit: Readonly<{ sha: string }>;
+  merge_base_commit: Readonly<{ sha: string }>;
+  files?: readonly PullFile[];
+}>;
 
 export type PullRequestApi = Readonly<{
-  listFiles: (
+  getPull: (
     input: Readonly<{
       owner: string;
       repo: string;
       pull_number: number;
-      per_page: number;
-      page: number;
     }>,
-  ) => Promise<Readonly<{ data: readonly PullFile[] }>>;
+  ) => Promise<Readonly<{ data: PullDetails }>>;
+  compareCommits: (
+    input: Readonly<{
+      owner: string;
+      repo: string;
+      basehead: string;
+    }>,
+  ) => Promise<Readonly<{ data: CompareDetails }>>;
   listReviewComments: (
     input: Readonly<{
       owner: string;
@@ -91,6 +185,15 @@ export type PullRequestApi = Readonly<{
       page: number;
     }>,
   ) => Promise<Readonly<{ data: readonly ReviewComment[] }>>;
+  listReviews: (
+    input: Readonly<{
+      owner: string;
+      repo: string;
+      pull_number: number;
+      per_page: number;
+      page: number;
+    }>,
+  ) => Promise<Readonly<{ data: readonly PullReview[] }>>;
   createReview: (
     input: Readonly<{
       owner: string;
@@ -107,13 +210,6 @@ export type PullRequestApi = Readonly<{
       }>[];
     }>,
   ) => Promise<Readonly<{ data: Readonly<{ id: number }> }>>;
-}>;
-
-export type PullSnapshot = Readonly<{
-  text: string;
-  changedLines: readonly Readonly<{ path: string; lines: readonly number[] }>[];
-  priorStableIdentities: readonly string[];
-  coverageOmissions: readonly string[];
 }>;
 
 type PullRequestTarget = Readonly<{
@@ -133,34 +229,65 @@ export class GitHubReviewClient {
 
   public async snapshot(
     input: Readonly<{
+      installationId: number;
+      repositoryId: number;
+      runId: RunId;
       baseSha: CommitSha;
       headSha: CommitSha;
     }>,
-  ): Promise<PullSnapshot> {
-    const files = await paginate((page) =>
-      this.#api.listFiles({ ...this.#params(), per_page: 100, page }),
+  ): Promise<CapturedPullRequestSnapshot> {
+    const pull = await this.#api.getPull(this.#params());
+    if (pull.data.repository.private)
+      throw new Error("Pull request repository is not public");
+    if (pull.data.repository.id !== input.repositoryId)
+      throw new Error("Pull request repository identity changed");
+    if (commitSha(pull.data.head.sha) !== input.headSha)
+      throw new Error("Pull request head changed before snapshot");
+    const comparison = await this.#api.compareCommits({
+      owner: this.#target.owner,
+      repo: this.#target.repository,
+      basehead: `${input.baseSha}...${input.headSha}`,
+    });
+    if (commitSha(comparison.data.base_commit.sha) !== input.baseSha)
+      throw new Error("GitHub comparison returned a different base");
+    const sourceFiles = comparison.data.files ?? [];
+    const files = sourceFiles.map((file, ordinal) =>
+      file.patch === undefined
+        ? ({
+            ordinal,
+            kind: "omitted",
+            path: file.filename,
+            status: file.status,
+            reason: "patch_unavailable",
+          } as const)
+        : ({
+            ordinal,
+            kind: "reviewable",
+            path: file.filename,
+            status: file.status,
+            patch: file.patch,
+            changedLines: parseChangedRightLines(file.patch),
+          } as const),
     );
+    const omissions = files
+      .filter((file) => file.kind === "omitted")
+      .map((file) => `${file.path}: GitHub did not provide a patch`);
+    if (sourceFiles.length === 300)
+      omissions.push(
+        "GitHub comparison reached the 300-file limit; additional files may be omitted",
+      );
+    return capturedPullRequestSnapshotSchema.parse({
+      formatVersion: 1,
+      mergeBaseSha: comparison.data.merge_base_commit.sha,
+      files,
+      coverageOmissions: omissions,
+    });
+  }
+
+  public async priorStableIdentities(): Promise<readonly string[]> {
     const comments = await paginate((page) =>
       this.#api.listReviewComments({ ...this.#params(), per_page: 100, page }),
     );
-    const changedLines = files.map((file) => ({
-      path: file.filename,
-      lines: parseChangedRightLines(file.patch),
-    }));
-    const omissions = files
-      .filter((file) => file.patch === undefined)
-      .map((file) => `${file.filename}: GitHub did not provide a patch`);
-    const sections = files.map(
-      (file) =>
-        `FILE ${file.filename} (${file.status})\n${file.patch ?? "[patch unavailable]"}`,
-    );
-    const prefix = `BASE ${input.baseSha}\nHEAD ${input.headSha}\n`;
-    const combined = `${prefix}\n${sections.join("\n\n")}`;
-    const text = combined.slice(0, 64_000);
-    if (combined.length > text.length)
-      omissions.push(
-        `Snapshot truncated by ${String(combined.length - text.length)} characters`,
-      );
     const identityPattern = /<!-- gauntlet:([^>]+) -->/g;
     const identities = new Set<string>();
     for (const comment of comments) {
@@ -170,17 +297,17 @@ export class GitHubReviewClient {
         if (identity !== undefined) identities.add(identity.trim());
       }
     }
-    return {
-      text,
-      changedLines,
-      priorStableIdentities: [...identities].sort(),
-      coverageOmissions: omissions,
-    };
+    return [...identities].sort();
   }
 
   public async publish(
     plan: Extract<PublicationPlan, { kind: "publish" }>,
   ): Promise<Readonly<{ reviewId: number }>> {
+    const pull = await this.#api.getPull(this.#params());
+    if (pull.data.repository.private)
+      throw new Error("Pull request repository is not public");
+    if (commitSha(pull.data.head.sha) !== plan.headSha)
+      throw new Error("Pull request head changed before publication");
     const result = await this.#api.createReview({
       ...this.#params(),
       commit_id: plan.headSha,
@@ -194,6 +321,17 @@ export class GitHubReviewClient {
       })),
     });
     return { reviewId: result.data.id };
+  }
+
+  public async findExisting(
+    targetRunId: RunId,
+  ): Promise<Readonly<{ reviewId: number }> | null> {
+    const reviews = await paginate((page) =>
+      this.#api.listReviews({ ...this.#params(), per_page: 100, page }),
+    );
+    const marker = `<!-- gauntlet-run:${targetRunId} -->`;
+    const existing = reviews.find((review) => review.body?.includes(marker));
+    return existing === undefined ? null : { reviewId: existing.id };
   }
 
   #params(): Readonly<{ owner: string; repo: string; pull_number: number }> {

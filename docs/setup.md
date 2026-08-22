@@ -60,6 +60,8 @@ Set the GitHub App webhook URL to the same Smee channel. Install the app on only
 
 See [Configuration](configuration.md) for every value and the Sail contract. Never commit `.env`, a private key, a webhook secret, or a Sail key. The repository ignore rules cover `.env`, `.env.*`, and SQLite runtime files.
 
-## Current deployment boundary
+## Delivery and recovery
 
-The checked-in service processes an accepted webhook in the handler that received it. SQLite prevents duplicate delivery and duplicate owner/repository/pull/head runs. A separate multi-process recovery worker remains an architecture target, so production deployments should currently run one service process and treat process loss during a review as a failed run that may need a new `synchronize` event.
+The webhook handler authenticates, validates, and durably queues an eligible run before returning. A leased worker drains accepted runs immediately and every five seconds. SQLite prevents duplicate delivery and duplicate owner/repository/pull/head runs, persists the immutable base and head target, and returns expired leases to the queue after process restart.
+
+Every published review contains a stable run marker. If the process stops after GitHub accepts the review but before the local completion write, the recovered worker finds the marker and records the existing review ID instead of submitting a second review.

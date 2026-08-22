@@ -45,7 +45,7 @@ Structured logs use run, repository, pull request, review, reviewer, and challen
 
 ## Known limitations
 
-- The current service performs work in the webhook handler. SQLite suppresses duplicate starts, but a crash after acceptance requires a later pull request update to start another head run.
+- A worker lease lasts 30 minutes. A process crash can delay recovery until that lease expires, but it does not require a new pull request event.
 - Review and challenge prompts use the same model. Separate calls and adversarial instructions reduce correlation but do not create model diversity.
-- `pnpm install --ignore-scripts` does not support every JavaScript project, and the fixed evidence plan currently targets pnpm projects.
+- The fixed evidence plan supports pnpm, npm, and Yarn lockfiles. JavaScript repositories without one of those lockfiles receive diff evidence but no dependency installation or project-script execution.
 - Local estimated cost is conservative accounting, not provider settlement.
