@@ -1,0 +1,8 @@
+ts	phase	decision	why	evidence	result
+2026-08-22T08:25:23Z	frame	set a strict end-to-end exit condition	the product promise spans webhook receipt through published GitHub feedback	conversation objective	open
+2026-08-22T08:25:24Z	frame	use high rigor with a ProductSpec, architecture comparison, TDD, and live provider checks	public code execution and automated review comments have high trust and security risk	conversation objective	open
+2026-08-22T08:25:25Z	workflow	keep the autonomous loop in this task	no external event controls the next build step	poteto autonomous-run playbook	active
+2026-08-22T08:31:00Z	research	based Gauntlet on the PR-AF review graph and PR-Agent GitHub delivery patterns	both upstream implementations expose tested code for the hardest orchestration and publication decisions	docs/research/prior-art.md	VERIFIED
+2026-08-22T08:31:00Z	spec	validated ProductSpec revision 1 before implementation	acceptance criteria need stable ids before tests and code reference them	specs/gauntlet.product-spec.md	VALID
+2026-08-22T08:43:22Z	architecture	chose normalized SQLite runs and leased work over a fully event-sourced journal	it closes publication and Sailbox crash windows with less reader load	docs/decisions/0001-durable-run-model.md	VERIFIED
+2026-08-22T08:43:22Z	architecture	added reviewer tool loops and capped findings at three per reviewer	paid work must be reservable before a Sailbox is created	docs/architecture.md	VERIFIED
