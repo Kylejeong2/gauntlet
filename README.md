@@ -36,10 +36,11 @@ Each reviewer returns a readiness score from 1 through 5. A score of 5 means rea
 Gauntlet publishes one GitHub COMMENT review with:
 
 - One score and rationale per selected reviewer.
+- An overall readiness score equal to the mean of the selected reviewer scores.
 - The areas and files examined.
 - Any explicit coverage omissions.
 - Estimated cost and duration.
-- At most five verified inline findings.
+- At most five verified inline findings, each attributed to its originating reviewer.
 
 Gauntlet does not publish positive inline comments, style preferences, duplicates, off-diff findings, or claims that failed or skipped verification.
 

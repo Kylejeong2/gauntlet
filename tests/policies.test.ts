@@ -143,7 +143,11 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
         reviewerId("adversarial-testing"),
         reviewerId("documentation"),
       ],
-      reports: candidates.map(report),
+      reports: [
+        { ...report(security), readiness: 1 },
+        { ...report(adversarial), readiness: 4 },
+        { ...report(speculative), readiness: 5 },
+      ],
       challenges: candidates.map((candidate) => ({
         kind: "confirmed" as const,
         findingId: candidate.id,
@@ -162,9 +166,13 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
     if (result.kind === "publish") {
       expect(result.reviewerComments).toHaveLength(3);
       expect(result.reviewerComments[0]?.body).toContain(
-        "Security reviewer: 2/5",
+        "Security reviewer: 1/5",
       );
+      expect(result.body).toContain("Overall readiness: 3.3/5");
       expect(result.comments).toHaveLength(1);
+      expect(result.comments[0]?.body).toContain(
+        "**Adversarial Testing reviewer · HIGH: Shell injection through name**",
+      );
       expect(result.comments[0]?.finding.location).toEqual({
         path: "src/index.ts",
         line: 12,

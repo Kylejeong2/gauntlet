@@ -249,7 +249,8 @@ The planner does not start a partial organization. If the full worst-case plan c
 5. Remove stable identities already published for the same pull request when the defect did not materially change.
 6. Sort by severity, confidence, evidence quality, and finding ID.
 7. Keep the first five findings.
-8. Render one COMMENT review per specialist, followed by one summary review with coverage omissions, cost, duration, and verified inline findings.
+8. Attribute each inline finding to its originating specialist.
+9. Render one COMMENT review per specialist, followed by one summary review with the one-decimal arithmetic mean of the selected reviewer scores, coverage omissions, cost, duration, and verified inline findings.
 
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
 

@@ -56,6 +56,12 @@ const reviewerTitle = (reviewer: string): string =>
 const formatDurationSeconds = (durationMs: number): string =>
   `${String(Math.round(durationMs / 100) / 10)}s`;
 
+const averageReadiness = (reports: readonly ReviewerReport[]): string => {
+  if (reports.length === 0) return "0.0";
+  const total = reports.reduce((sum, report) => sum + report.readiness, 0);
+  return (total / reports.length).toFixed(1);
+};
+
 export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const reportCounts = new Map<string, number>();
   for (const report of input.reports) {
@@ -143,7 +149,7 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const selected = [...unique.values()].sort(strongerFirst).slice(0, 5);
   const comments = selected.map((candidate) => ({
     finding: candidate,
-    body: `**${candidate.severity.toUpperCase()}: ${candidate.title}**\n\nTrigger: ${candidate.trigger}\n\nEvidence: ${candidate.evidence}\n\nAction: ${candidate.proposedAction}\n\n<!-- gauntlet:${candidate.stableIdentity} -->`,
+    body: `**${reviewerTitle(candidate.reviewer)} reviewer · ${candidate.severity.toUpperCase()}: ${candidate.title}**\n\nTrigger: ${candidate.trigger}\n\nEvidence: ${candidate.evidence}\n\nAction: ${candidate.proposedAction}\n\n<!-- gauntlet:${candidate.stableIdentity} -->`,
   }));
   const omissions =
     input.coverageOmissions.length === 0
@@ -153,7 +159,7 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     reviewer: report.reviewer,
     body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
   }));
-  const body = `## Gauntlet summary\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
+  const body = `## Gauntlet summary\n\nOverall readiness: ${averageReadiness(selectedReports)}/5\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",
     runId: input.runId,
