@@ -6,9 +6,9 @@ The product goal is strict. Every visible finding must survive a separate challe
 
 ## Current status
 
-Gauntlet has a working local implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The local gate covers domain, SQLite, GitHub payload, exact-SHA snapshots, Sail requests, Sailbox lifecycle, orchestration, challenges, redacted logging, and publication policy contracts.
+Gauntlet has a working implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The deterministic gate covers domain, SQLite, GitHub payload, exact-SHA snapshots, Sail requests, Sailbox lifecycle, orchestration, challenges, redacted logging, and publication policy contracts.
 
-Live verification on 2026-08-22 created a size `s` Sailbox, executed credential-free argument-vector commands, verified the development image's Node toolchain, and terminated it. Sail also completed a schema-valid GPT-OSS 120B review through the production client with response ID `resp_01a02aab-140e-71cf-b030-f57a89cb3c12`. The installed GitHub App flow remains the final live gate. Gauntlet never silently switches models.
+Live verification on 2026-08-22 completed the installed GitHub App flow on two public fixture pull requests. The command-injection run published eight separate specialist comments and one verified inline finding for $0.013657; the documentation-only control published eight specialist comments and zero inline findings for $0.012065. Both credential-free Sailboxes terminated, and replaying the first PR at the same head created no duplicate review. Gauntlet never silently switches models.
 
 ## Reviewers
 
@@ -46,7 +46,7 @@ The implemented publication reducer enforces these rules without provider or Git
 1. Probot verifies the signature, and the handler durably records the delivery decision.
 2. A leased worker compares the exact base and head SHAs, then stores and reloads the merge base, patches, right-side changed lines, and coverage omissions.
 3. The planner reserves the full worst-case run under $0.25.
-4. Gauntlet creates one credential-free Sailbox and checks out the exact public head SHA.
+4. Gauntlet creates one credential-free Sailbox, checks out the exact public head SHA, and scopes every diff command to the persisted merge-base SHA.
 5. Repository setup and standard checks run with bounded time and output.
 6. Up to ten GPT-OSS reviewers inspect the snapshot and bounded reviewer-specific Sailbox evidence.
 7. Each reviewer returns one score and at most three candidate findings.
@@ -101,7 +101,7 @@ specs/             Product intent and acceptance criteria.
 - [Security model](docs/security.md) documents hostile-code isolation, credentials, validation, and limitations.
 - [Operations](docs/operations.md) covers run sequence, failures, duplicates, and incident handling.
 - [Testing](docs/testing.md) lists the local gates and the acceptance criteria covered by the current suites.
-- [Acceptance status](docs/acceptance-status.md) maps each ProductSpec criterion to current evidence and remaining live gates.
+- [Acceptance status](docs/acceptance-status.md) maps each ProductSpec criterion to deterministic and live evidence.
 
 ## Development contract
 

@@ -38,7 +38,7 @@ The GitHub suites cover complete event classification, public-only, draft, bot, 
 
 The Sail suites assert the GPT-OSS 120B model slug, `metadata.completion_window: "asap"`, low reasoning effort, strict output parsing, reasoning-item exclusion, integer-microdollar token accounting, bounded 429 retry, malformed-response failure, and reviewer identity preservation.
 
-The Sailbox suites assert size `s` with the live provider minimums, public HTTPS clone, exact base and head fetch, detached checkout, empty command environments, argument arrays, timeouts, bounded output, allowlisted project commands, setup-failure cleanup, and normal termination.
+The Sailbox suites assert size `s` with the live provider minimums, public HTTPS clone, exact merge-base and head fetch, detached checkout, merge-base-scoped evidence, empty command environments, argument arrays, timeouts, bounded output, allowlisted project commands, setup-failure cleanup, and normal termination.
 
 The orchestration suites prove all selected reviewers run serially, every candidate gets a distinct challenge call, reviewer or provider failure publishes nothing, sandbox cleanup runs in a `finally` path, the full ten-reviewer plan reserves $0.13, and successful output creates one publication plan.
 
@@ -56,7 +56,9 @@ The first GitHub Actions CI run passed dependency installation and `pnpm check` 
 
 A local production-server smoke sent pull-request payloads through Probot's real HTTP route after the exact-snapshot change. An invalid HMAC returned 400. A valid eligible payload returned 200 in 3.4 ms and persisted one run before background processing. A valid unsupported action returned 200 in 1.6 ms and persisted `unsupported_action` without a run. The intentionally fake installation then failed cleanly in the worker. The captured log contained nine `[REDACTED]` markers and contained neither the JSON webhook body nor the invalid signature. A unit contract preserves the nested Probot error shapes that required redaction.
 
-GitHub App creation, installation, live webhook delivery, visible review, and stable-marker update remain open live gates. They require persistent repository access and are performed only with user confirmation at the GitHub action boundary.
+The installed `gauntlet-review-dev` GitHub App completed two signed-webhook runs on 2026-08-22. Public PR #1 run `e6750a95-dda9-4da9-b23e-7c9a18a2ffaa` used persisted merge base `8ff26e1f917e76a7544c6f8cf06f5afb3545f2e1`, ran repository checks in Sailbox `sb_5600d67f-5932-4b5b-a219-61d99fae5240`, completed eight reviewers and eleven challenges, published eight separate specialist comments plus summary review `5000803125`, emitted one inline command-injection finding, cost an estimated $0.013657, and terminated the box. A same-head close/reopen replay retained the same run ID and left the bot review count unchanged at 19.
+
+Public PR #2 run `93c13d9a-4ab7-4735-8db0-216d9e753007` ran in Sailbox `sb_f7c93098-149c-420f-8d03-dd5fad164fcc`, completed eight reviewers and three independent challenges, published eight separate specialist comments plus summary review `5000809179`, emitted zero inline findings, cost an estimated $0.012065, and terminated the box. Chrome semantic inspection and Computer accessibility inspection both confirmed that the specialist reports render as distinct GitHub comment cards followed by the compact summary.
 
 ## TDD evidence
 

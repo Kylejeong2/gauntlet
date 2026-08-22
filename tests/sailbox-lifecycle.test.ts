@@ -56,6 +56,7 @@ describe("Sailbox lifecycle", () => {
       repository: "gauntlet",
       pullNumber: 1,
       baseSha: commitSha("a".repeat(40)),
+      mergeBaseSha: commitSha("c".repeat(40)),
       headSha: commitSha("b".repeat(40)),
       snapshotText: "diff",
       changedLines: [],
@@ -106,6 +107,7 @@ describe("Sailbox lifecycle", () => {
     await environment.evidence(handle, reviewerId("security"));
     await environment.evidence(handle, reviewerId("edge-cases"));
     await environment.evidence(handle, reviewerId("documentation"));
+    await environment.evidence(handle, reviewerId("dependency-history"));
     expect(
       commands.filter((command) =>
         command.argv.join(" ").includes("pnpm install"),
@@ -127,6 +129,14 @@ describe("Sailbox lifecycle", () => {
         command.argv.join(" ").includes("pnpm typecheck"),
       ),
     ).toBe(false);
+    expect(
+      commands.some((command) =>
+        command.argv
+          .slice(3)
+          .join(" ")
+          .includes(`${"c".repeat(40)}..${"b".repeat(40)}`),
+      ),
+    ).toBe(true);
     await environment.terminate(handle);
     expect(terminated).toBe(true);
   });
@@ -157,6 +167,7 @@ describe("Sailbox lifecycle", () => {
         repository: "gauntlet",
         pullNumber: 1,
         baseSha: commitSha("a".repeat(40)),
+        mergeBaseSha: commitSha("c".repeat(40)),
         headSha: commitSha("b".repeat(40)),
         snapshotText: "diff",
         changedLines: [],

@@ -6,7 +6,7 @@ Status: accepted design for ProductSpec revision 1. Implementation and live veri
 
 The implementation provides the SDK-independent domain and SQLite foundation described here: branded boundary constructors, discriminated run states, the ten-entry reviewer registry, strict reviewer and finding schemas, the integer-microdollar budget policy, the pure challenge-gated publication reducer, structured-value redaction, `deriveNextWork`, direct migrations, and durable acceptance, lease, and budget-reservation operations.
 
-Concrete adapters now cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, GPT-OSS 120B through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. A completed installed-App live flow remains the final product gate. [Testing Gauntlet](testing.md) records the current evidence.
+Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, GPT-OSS 120B through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
 
 ## What Gauntlet does
 
@@ -189,7 +189,7 @@ The application records command ID, reviewer ID, executable, argument digest, du
 
 ## Sailbox execution
 
-Each run creates one size `s` Sailbox and terminates it after publication or failure. The Sailbox receives a public repository URL and the exact head SHA. It receives no GitHub App ID, installation token, private key, webhook secret, Sail key, host environment, host volume, or Docker socket.
+Each run creates one size `s` Sailbox and terminates it after publication or failure. The Sailbox receives a public repository URL, the exact head SHA, and the persisted merge-base SHA. Every diff and dependency-evidence command uses `merge-base..head`, so an advancing base branch cannot contaminate the review with unrelated changes. It receives no GitHub App ID, installation token, private key, webhook secret, Sail key, host environment, host volume, or Docker socket.
 
 The preparation sequence is deterministic:
 
@@ -310,7 +310,7 @@ SQLite integration tests cover duplicate deliveries, same-head deliveries, new-h
 
 Contract tests cover GitHub webhook fixtures, signatures, pagination, review payloads, Sail structured responses and usage, Sailbox create and command results, and all strict schemas.
 
-Fixture evaluations cover the three ProductSpec AI eval groups. Live tests use only the public Gauntlet repository and opt-in credentials. The final live gate follows the signed webhook through GPT-OSS, a real Sailbox, and a visible GitHub review, then confirms Sailbox termination and the reported cost.
+Fixture evaluations cover the three ProductSpec AI eval groups. Live tests use only the public Gauntlet repository and opt-in credentials. The completed live gate followed signed webhooks through GPT-OSS, real Sailboxes, and visible GitHub reviews, then confirmed termination, reported cost, clean-change suppression, and same-head idempotency.
 
 ## Accepted tradeoffs
 

@@ -160,7 +160,7 @@ export class SailboxReviewEnvironment {
       );
       await checkedRun(
         instance,
-        ["git", "fetch", "--depth=1", "origin", input.baseSha],
+        ["git", "fetch", "--depth=1", "origin", input.mergeBaseSha],
         "/workspace/repo",
         this.#audit,
       );
@@ -285,14 +285,14 @@ const evidenceCommands = (
 ): readonly EvidenceCommand[] => {
   const diffCheck: EvidenceCommand = {
     key: "diff-check",
-    argv: ["git", "diff", "--check", `${input.baseSha}..${input.headSha}`],
+    argv: ["git", "diff", "--check", `${input.mergeBaseSha}..${input.headSha}`],
   };
   const dependencies: EvidenceCommand = {
     key: "dependency-diff",
     argv: [
       "git",
       "diff",
-      `${input.baseSha}..${input.headSha}`,
+      `${input.mergeBaseSha}..${input.headSha}`,
       "--",
       "package.json",
       "pnpm-lock.yaml",

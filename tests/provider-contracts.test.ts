@@ -64,7 +64,7 @@ describe("Sail model contract", () => {
       model: "openai/gpt-oss-120b",
       metadata: { completion_window: "asap" },
       reasoning: { effort: "low" },
-      max_output_tokens: 3000,
+      max_output_tokens: 6000,
     });
     expect(request.background).toBeUndefined();
     expect(init.headers).toMatchObject({ Authorization: "Bearer test-key" });

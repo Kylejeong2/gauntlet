@@ -25,6 +25,7 @@ The model slug is fixed to `openai/gpt-oss-120b`. Requests use Sail's OpenAI-com
 - A maximum of 3,000 output tokens.
 - A 180-second request timeout.
 - Serial model calls and bounded retries for HTTP 429 responses.
+- A 6,000-token response ceiling, with concise schema-only output instructions, so GPT-OSS reasoning does not truncate a specialist report before its validated JSON object.
 
 Gauntlet does not silently change models. A provider rejection, timeout, malformed response, missing reviewer report, or inconclusive challenge fails closed. GPT-OSS may emit a reasoning item before its message item; Gauntlet reads only `output_text` content and validates the extracted JSON again with Zod.
 

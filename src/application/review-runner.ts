@@ -21,6 +21,7 @@ export type ReviewRunInput = Readonly<{
   repository: string;
   pullNumber: number;
   baseSha: CommitSha;
+  mergeBaseSha: CommitSha;
   headSha: CommitSha;
   snapshotText: string;
   changedLines: PublicationInput["changedLines"];

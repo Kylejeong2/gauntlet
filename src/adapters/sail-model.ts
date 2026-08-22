@@ -122,6 +122,8 @@ export class SailModelClient {
         request.question,
         "Inspect only the supplied immutable pull-request snapshot.",
         "Return a 1-to-5 readiness score and at most three concrete defects.",
+        "Keep the rationale under 120 words and every finding field under 80 words.",
+        "Return only the JSON object required by the response schema.",
         "Do not report style preferences, praise, or speculative risks.",
         "Every finding must name an exact changed right-side line.",
         `Snapshot:\n${request.snapshot}`,
@@ -206,7 +208,7 @@ export class SailModelClient {
       model: SAIL_MODEL,
       metadata: { completion_window: "asap" },
       reasoning: { effort: "low" },
-      max_output_tokens: 3000,
+      max_output_tokens: 6000,
       input: [{ role: "user", content: prompt }],
       text: {
         format: {

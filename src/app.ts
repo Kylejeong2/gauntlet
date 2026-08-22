@@ -174,6 +174,7 @@ const executeQueuedRun = async (
       repository: run.repository,
       pullNumber: run.pullNumber,
       baseSha: run.baseSha,
+      mergeBaseSha: captured.mergeBaseSha,
       headSha: run.headSha,
       snapshotText: snapshot.text,
       changedLines: snapshot.changedLines,
