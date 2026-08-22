@@ -1,5 +1,9 @@
 # Gauntlet
 
+<p align="center">
+  <img src="assets/gauntlet-app-logo-512.png" alt="Gauntlet cosmic armored fist logo" width="180" />
+</p>
+
 Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses GPT-OSS 120B through Sail and executes repository checks in ephemeral Sailboxes.
 
 The product goal is strict. Every visible finding must survive a separate challenge. Each specialist gets a readable top-level comment, while verified code defects stay inline and speculative findings stay hidden.
