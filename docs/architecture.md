@@ -2,6 +2,12 @@
 
 Status: accepted design for ProductSpec revision 1. Implementation and live verification are tracked separately.
 
+## Implemented foundation
+
+The implementation provides the SDK-independent domain and SQLite foundation described here: branded boundary constructors, discriminated run states, the ten-entry reviewer registry, strict reviewer and finding schemas, the integer-microdollar budget policy, the pure challenge-gated publication reducer, structured-value redaction, `deriveNextWork`, direct migrations, and durable acceptance, lease, and budget-reservation operations.
+
+Concrete adapters now cover public GitHub patch snapshots and one-review publication, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, runs reviewer and challenge calls with concurrency two, reduces results, publishes once, and terminates the box. The current service invokes that flow from the authenticated webhook handler. A separate crash-recovery worker and a completed installed-App live flow remain future gates. The exact current evidence is documented in [Testing Gauntlet](testing.md).
+
 ## What Gauntlet does
 
 Gauntlet receives a public pull request webhook, reviews one immutable head commit, and publishes one compact GitHub review. Eight core specialists inspect every eligible pull request. Gauntlet can add test-quality and concurrency specialists when the diff calls for them. Every specialist returns a readiness score from 1 through 5 and at most three candidate findings.
@@ -311,4 +317,3 @@ Fixture evaluations cover the three ProductSpec AI eval groups. Live tests use o
 - Lifecycle scripts stay disabled during dependency installation. Some repositories will report incomplete execution coverage.
 - Reviewer and challenger use the same model in the first release. Separate prompts and context reduce correlation but do not create model diversity.
 - The local ledger reports a conservative estimate. It does not claim to equal settled Sail billing.
-

@@ -6,3 +6,7 @@ ts	phase	decision	why	evidence	result
 2026-08-22T08:31:00Z	spec	validated ProductSpec revision 1 before implementation	acceptance criteria need stable ids before tests and code reference them	specs/gauntlet.product-spec.md	VALID
 2026-08-22T08:43:22Z	architecture	chose normalized SQLite runs and leased work over a fully event-sourced journal	it closes publication and Sailbox crash windows with less reader load	docs/decisions/0001-durable-run-model.md	VERIFIED
 2026-08-22T08:43:22Z	architecture	added reviewer tool loops and capped findings at three per reviewer	paid work must be reservable before a Sailbox is created	docs/architecture.md	VERIFIED
+2026-08-22T09:10:18Z	implementation	built the typed domain, SQLite store, provider adapters, and one-review orchestrator	the smallest complete local slice reaches from accepted delivery to challenge-gated publication	src and tests	VERIFIED
+2026-08-22T09:10:18Z	verification	passed the complete local gate with 45 tests	formatting, strict lint, types, unit, integration, fixture evals, and build must agree before commit	pnpm check	PASS
+2026-08-22T09:10:18Z	live	created, executed in, and terminated a real size s Sailbox	provider-enforced resource minimums and cleanup required live proof	sb_32526880-0867-48e4-a173-69fdb5b4e91f	PASS
+2026-08-22T09:10:18Z	live	updated Sail inference to metadata completion_window and strict reviewer identity	live calls exposed an obsolete field, identity drift, rate limits, and timeout before installed App testing	DeepSeek V4 Flash smoke	OPEN

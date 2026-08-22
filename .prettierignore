@@ -1,0 +1,9 @@
+dist
+coverage
+pnpm-lock.yaml
+.claude
+docs/architecture.md
+docs/architecture
+docs/decisions
+docs/research
+specs

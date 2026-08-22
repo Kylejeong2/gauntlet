@@ -1,0 +1,264 @@
+import { describe, expect, it } from "vitest";
+import {
+  BUDGET_LIMIT,
+  BudgetLedger,
+  estimateModelRequest,
+} from "../src/domain/budget.js";
+import {
+  commitSha,
+  findingId,
+  reviewerId,
+  runId,
+  usdMicros,
+} from "../src/domain/ids.js";
+import { reducePublication } from "../src/domain/publication.js";
+import { redact } from "../src/domain/redaction.js";
+import { deriveNextWork, type NextWork } from "../src/domain/scheduler.js";
+import type {
+  CandidateFinding,
+  ChallengeVerdict,
+  ReviewerReport,
+  RunView,
+} from "../src/domain/types.js";
+
+describe("AC-13 budget policy", () => {
+  it("estimates with integer microdollars and refuses reservations over $0.25", () => {
+    expect(
+      estimateModelRequest({
+        inputTokens: 1_000,
+        outputTokens: 200,
+        inputUsdPerMillion: 0.1,
+        outputUsdPerMillion: 0.3,
+      }),
+    ).toBe(160);
+    const ledger = new BudgetLedger(BUDGET_LIMIT);
+    expect(
+      ledger.reserve({ key: "mandatory", amount: usdMicros(249_999) }).kind,
+    ).toBe("reserved");
+    expect(ledger.reserve({ key: "overflow", amount: usdMicros(2) })).toEqual({
+      kind: "denied",
+      available: usdMicros(1),
+    });
+    expect(
+      ledger.reserve({ key: "mandatory", amount: usdMicros(100) }).kind,
+    ).toBe("already_reserved");
+  });
+});
+
+const finding = (
+  overrides: Partial<CandidateFinding> = {},
+): CandidateFinding => ({
+  id: findingId("finding-a"),
+  reviewer: reviewerId("security"),
+  location: { path: "src/index.ts", line: 12 },
+  severity: "high",
+  confidence: 0.9,
+  title: "Injection",
+  trigger: "Untrusted name reaches exec.",
+  evidence: "A focused reproduction executed a substituted command.",
+  proposedAction: "Use an argument vector.",
+  stableIdentity: "injection:name",
+  ...overrides,
+});
+
+const report = (candidate: CandidateFinding): ReviewerReport => ({
+  reviewer: candidate.reviewer,
+  readiness: 2,
+  rationale: "A blocking defect remains.",
+  examinedAreas: ["process boundary"],
+  findings: [candidate],
+});
+
+describe("AC-7, AC-8, and AC-10 publication reduction", () => {
+  it("requires confirmed challenges and exact reviewed-head changed lines", () => {
+    const a = finding();
+    const outsideDiff = finding({
+      id: findingId("finding-b"),
+      location: { path: "src/index.ts", line: 99 },
+    });
+    const rejected = finding({
+      id: findingId("finding-c"),
+      location: { path: "src/index.ts", line: 13 },
+    });
+    const result = reducePublication({
+      runId: runId("run-1"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [reviewerId("security")],
+      reports: [{ ...report(a), findings: [a, outsideDiff, rejected] }],
+      challenges: [
+        {
+          kind: "confirmed",
+          findingId: a.id,
+          reason: "Reproduction proves reachability.",
+        },
+        {
+          kind: "confirmed",
+          findingId: outsideDiff.id,
+          reason: "Real but outside the diff.",
+        },
+        {
+          kind: "rejected",
+          findingId: rejected.id,
+          reason: "Guard prevents it.",
+        },
+      ],
+      changedLines: [{ path: "src/index.ts", lines: [12, 13] }],
+      priorStableIdentities: [],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(10_000),
+      durationMs: 1000,
+    });
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish")
+      expect(result.comments.map((comment) => comment.finding.id)).toEqual([
+        a.id,
+      ]);
+  });
+
+  it("deduplicates semantically, suppresses prior identities, ranks deterministically, and caps at five", () => {
+    const candidates = Array.from({ length: 8 }, (_, index) =>
+      finding({
+        id: findingId(`finding-${String(index)}`),
+        location: { path: "src/index.ts", line: index + 1 },
+        severity: index === 7 ? "critical" : "medium",
+        confidence: 0.5 + index / 100,
+        stableIdentity: index < 2 ? "duplicate" : `identity-${String(index)}`,
+      }),
+    );
+    const challenges: ChallengeVerdict[] = candidates.map((candidate) => ({
+      kind: "confirmed",
+      findingId: candidate.id,
+      reason: "Confirmed.",
+    }));
+    const firstCandidate = candidates[0];
+    if (firstCandidate === undefined)
+      throw new Error("Fixture must contain a candidate");
+    const result = reducePublication({
+      runId: runId("run-1"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [reviewerId("security")],
+      reports: [{ ...report(firstCandidate), findings: candidates }],
+      challenges,
+      changedLines: [
+        {
+          path: "src/index.ts",
+          lines: candidates.map((_, index) => index + 1),
+        },
+      ],
+      priorStableIdentities: ["identity-6"],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(10_000),
+      durationMs: 1000,
+    });
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish") {
+      expect(result.comments).toHaveLength(5);
+      expect(result.comments[0]?.finding.id).toBe(findingId("finding-7"));
+      expect(
+        new Set(
+          result.comments.map((comment) => comment.finding.stableIdentity),
+        ).size,
+      ).toBe(5);
+      expect(
+        result.comments.some(
+          (comment) => comment.finding.stableIdentity === "identity-6",
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("fails closed when a selected reviewer report is missing", () => {
+    expect(
+      reducePublication({
+        runId: runId("run-1"),
+        headSha: commitSha("a".repeat(40)),
+        selectedReviewers: [reviewerId("security")],
+        reports: [],
+        challenges: [],
+        changedLines: [],
+        priorStableIdentities: [],
+        coverageOmissions: [],
+        estimatedCost: usdMicros(0),
+        durationMs: 0,
+      }),
+    ).toEqual({
+      kind: "skip",
+      reason: "missing_reviewer_reports",
+      missing: [reviewerId("security")],
+    });
+  });
+
+  it("fails closed on contradictory challenge records", () => {
+    const candidate = finding();
+    const result = reducePublication({
+      runId: runId("run-1"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [reviewerId("security")],
+      reports: [report(candidate)],
+      challenges: [
+        {
+          kind: "confirmed",
+          findingId: candidate.id,
+          reason: "Confirmed.",
+        },
+        {
+          kind: "rejected",
+          findingId: candidate.id,
+          reason: "Disproved.",
+        },
+      ],
+      changedLines: [{ path: "src/index.ts", lines: [12] }],
+      priorStableIdentities: [],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(0),
+      durationMs: 0,
+    });
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish") expect(result.comments).toEqual([]);
+  });
+});
+
+describe("AC-15 redaction", () => {
+  it("redacts sensitive keys, inline credentials, environment values, and long source-like strings", () => {
+    const result = redact(
+      {
+        authorization: "Bearer super-secret-token",
+        nested: {
+          privateKey: "-----BEGIN PRIVATE KEY-----secret",
+          message: "token=super-secret-token",
+        },
+        source: "x".repeat(600),
+      },
+      { environmentValues: ["super-secret-token"] },
+    );
+    const serialized = JSON.stringify(result.value);
+    expect(serialized).not.toContain("super-secret-token");
+    expect(serialized).not.toContain("BEGIN PRIVATE KEY");
+    expect(serialized).not.toContain("x".repeat(100));
+    expect(result.redactionCount).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("pure scheduling", () => {
+  it.each<[RunView["state"], NextWork["kind"]]>([
+    [{ kind: "accepted" }, "snapshot"],
+    [{ kind: "snapshotting" }, "snapshot"],
+    [{ kind: "planning" }, "plan"],
+    [{ kind: "preparing_sailbox" }, "prepare_sailbox"],
+    [{ kind: "reviewing" }, "review"],
+    [{ kind: "challenging" }, "challenge"],
+    [{ kind: "reducing" }, "reduce"],
+    [{ kind: "publishing" }, "publish"],
+    [{ kind: "cleaning_up" }, "cleanup"],
+  ])(
+    "derives $state.kind as $expected deterministically",
+    (state, expected) => {
+      expect(
+        deriveNextWork(
+          { runId: runId("run-1"), state, pendingWorkKeys: [] },
+          100,
+        ).kind,
+      ).toBe(expected);
+    },
+  );
+});
