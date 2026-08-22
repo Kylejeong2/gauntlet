@@ -106,13 +106,16 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       priorStableIdentities: [],
       coverageOmissions: [],
       estimatedCost: usdMicros(10_000),
-      durationMs: 1000,
+      durationMs: 207_648,
     });
     expect(result.kind).toBe("publish");
-    if (result.kind === "publish")
+    if (result.kind === "publish") {
       expect(result.comments.map((comment) => comment.finding.id)).toEqual([
         a.id,
       ]);
+      expect(result.body).toContain("Duration: 207.6s");
+      expect(result.body).not.toContain("207648ms");
+    }
   });
 
   it("requires cross-specialist corroboration and collapses same-line duplicates", () => {

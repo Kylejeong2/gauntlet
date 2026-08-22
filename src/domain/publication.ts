@@ -53,6 +53,9 @@ const reviewerTitle = (reviewer: string): string =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+const formatDurationSeconds = (durationMs: number): string =>
+  `${String(Math.round(durationMs / 100) / 10)}s`;
+
 export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const reportCounts = new Map<string, number>();
   for (const report of input.reports) {
@@ -150,7 +153,7 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     reviewer: report.reviewer,
     body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
   }));
-  const body = `## Gauntlet summary\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${String(input.durationMs)}ms\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
+  const body = `## Gauntlet summary\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",
     runId: input.runId,
