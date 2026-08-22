@@ -147,7 +147,7 @@ export const runReview = async (
     }
     const reviewResults = await mapConcurrent(
       input.reviewers,
-      2,
+      1,
       async (reviewer) =>
         ports.model.review({
           reviewer: reviewer.id,
@@ -169,7 +169,7 @@ export const runReview = async (
     }
     const reports = reviewResults.map((result) => result.report);
     const findings = reports.flatMap((report) => report.findings);
-    const challengeResults = await mapConcurrent(findings, 2, async (finding) =>
+    const challengeResults = await mapConcurrent(findings, 1, async (finding) =>
       ports.model.challenge({
         finding,
         snapshot: input.snapshotText,

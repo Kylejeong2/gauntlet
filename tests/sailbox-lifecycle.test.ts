@@ -66,9 +66,20 @@ describe("Sailbox lifecycle", () => {
 
     const handle = await environment.prepare(input);
     expect(creates).toEqual([
-      { name: "gauntlet-run-1", size: "s", memoryLimitGib: 2, diskLimitGib: 8 },
+      {
+        name: "gauntlet-run-1",
+        image: "devbox",
+        size: "s",
+        memoryLimitGib: 2,
+        diskLimitGib: 8,
+      },
     ]);
     expect(commands[0]).toEqual({
+      argv: ["env", "-C", "/", "mkdir", "-p", "/workspace"],
+      env: {},
+      timeoutSeconds: 120,
+    });
+    expect(commands[1]).toEqual({
       argv: [
         "env",
         "-C",
@@ -83,7 +94,7 @@ describe("Sailbox lifecycle", () => {
       env: {},
       timeoutSeconds: 120,
     });
-    expect(commands[3]?.argv).toEqual([
+    expect(commands[4]?.argv).toEqual([
       "env",
       "-C",
       "/workspace/repo",

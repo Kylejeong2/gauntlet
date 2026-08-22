@@ -7,19 +7,33 @@ import {
 } from "../src/adapters/sailbox-tools.js";
 
 describe("Sail model contract", () => {
-  it("uses DeepSeek V4 Flash through the ASAP Responses API and accounts for usage", async () => {
+  it("uses GPT-OSS 120B through Sail's synchronous ASAP contract and accounts for usage", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           id: "response-1",
           status: "completed",
-          output_text: JSON.stringify({
-            reviewer: "security",
-            readiness: 5,
-            rationale: "No reachable security defect found.",
-            examinedAreas: ["changed trust boundaries"],
-            findings: [],
-          }),
+          output: [
+            {
+              type: "reasoning",
+              content: [{ type: "reasoning_text", text: "Inspect the line." }],
+            },
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: `The changed line is inert.\n${JSON.stringify({
+                    reviewer: "security",
+                    readiness: 5,
+                    rationale: "No reachable security defect found.",
+                    examinedAreas: ["changed trust boundaries"],
+                    findings: [],
+                  })}`,
+                },
+              ],
+            },
+          ],
           usage: { input_tokens: 1000, output_tokens: 200 },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -39,7 +53,7 @@ describe("Sail model contract", () => {
     });
 
     expect(result.report.readiness).toBe(5);
-    expect(result.cost).toBe(usdMicros(126));
+    expect(result.cost).toBe(usdMicros(140));
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, init] = fetcher.mock.calls[0] ?? [];
     expect(url).toBe("https://api.sailresearch.com/v1/responses");
@@ -47,11 +61,14 @@ describe("Sail model contract", () => {
       throw new Error("Expected JSON request body");
     const request = JSON.parse(init.body) as Record<string, unknown>;
     expect(request).toMatchObject({
-      model: "deepseek/deepseek-v4-flash-0731",
+      model: "openai/gpt-oss-120b",
       metadata: { completion_window: "asap" },
-      store: false,
+      reasoning: { effort: "low" },
+      max_output_tokens: 3000,
     });
+    expect(request.background).toBeUndefined();
     expect(init.headers).toMatchObject({ Authorization: "Bearer test-key" });
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBeNull();
   });
 
   it("fails closed on a malformed model response", async () => {
@@ -117,6 +134,9 @@ describe("Sail model contract", () => {
     });
     expect(result.responseId).toBe("response-2");
     expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(
+      new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("Idempotency-Key"),
+    ).toBeNull();
   });
 });
 

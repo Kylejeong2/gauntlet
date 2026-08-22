@@ -1,14 +1,14 @@
 # Gauntlet
 
-Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses DeepSeek V4 Flash through Sail and executes repository checks in ephemeral Sailboxes.
+Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses GPT-OSS 120B through Sail and executes repository checks in ephemeral Sailboxes.
 
-The product goal is strict. Every visible finding must survive a separate challenge. Maintainers get one compact review, not a stream of speculative comments.
+The product goal is strict. Every visible finding must survive a separate challenge. Each specialist gets a readable top-level comment, while verified code defects stay inline and speculative findings stay hidden.
 
 ## Current status
 
 Gauntlet has a working local implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The local gate covers domain, SQLite, GitHub payload, exact-SHA snapshots, Sail requests, Sailbox lifecycle, orchestration, challenges, redacted logging, and publication policy contracts.
 
-Live verification on 2026-08-22 created a size `s` Sailbox, executed a credential-free argument-vector command, and terminated it. Sail also completed a schema-valid DeepSeek V4 Flash review through the production client with response ID `resp_01a028bf-4ab0-7115-900a-2476a057eaa2`, readiness 4, zero findings, and an estimated cost of 68 microdollars. The installed GitHub App flow remains the final live gate. Gauntlet never silently switches models.
+Live verification on 2026-08-22 created a size `s` Sailbox, executed credential-free argument-vector commands, verified the development image's Node toolchain, and terminated it. Sail also completed a schema-valid GPT-OSS 120B review through the production client with response ID `resp_01a02aab-140e-71cf-b030-f57a89cb3c12`. The installed GitHub App flow remains the final live gate. Gauntlet never silently switches models.
 
 ## Reviewers
 
@@ -39,7 +39,7 @@ Gauntlet publishes one GitHub COMMENT review with:
 
 Gauntlet does not publish positive inline comments, style preferences, duplicates, off-diff findings, or claims that failed or skipped verification.
 
-The implemented publication reducer enforces these rules without provider or GitHub SDK types. It requires one valid report per selected reviewer, keeps only explicitly confirmed findings, validates right-side lines against the reviewed snapshot, suppresses stable identities from prior heads, deduplicates, ranks deterministically, and returns at most five inline comments.
+The implemented publication reducer enforces these rules without provider or GitHub SDK types. It requires one valid report per selected reviewer, keeps only explicitly confirmed findings, requires cross-specialist same-line corroboration except for high-confidence critical findings, validates right-side lines against the reviewed snapshot, suppresses stable identities from prior heads, collapses same-line duplicates, ranks deterministically, and returns at most five inline comments.
 
 ## How a review works
 
@@ -48,11 +48,11 @@ The implemented publication reducer enforces these rules without provider or Git
 3. The planner reserves the full worst-case run under $0.25.
 4. Gauntlet creates one credential-free Sailbox and checks out the exact public head SHA.
 5. Repository setup and standard checks run with bounded time and output.
-6. Up to ten DeepSeek reviewers inspect the snapshot and bounded reviewer-specific Sailbox evidence.
+6. Up to ten GPT-OSS reviewers inspect the snapshot and bounded reviewer-specific Sailbox evidence.
 7. Each reviewer returns one score and at most three candidate findings.
-8. A separate DeepSeek request tries to disprove every finding.
+8. A separate GPT-OSS request tries to disprove every finding.
 9. Pure policy rejects unconfirmed, duplicate, stale, or unanchorable findings.
-10. Gauntlet publishes one compact review and terminates the Sailbox.
+10. Gauntlet publishes one top-level comment per specialist, then one compact summary review with verified inline findings, and terminates the Sailbox.
 
 Read [the architecture](docs/architecture.md) for the state model, tool limits, database tables, budget rules, and recovery behavior.
 
@@ -68,7 +68,7 @@ Read [the security model](docs/security.md) for the full threat model, credentia
 
 ## Cost limit
 
-Every pull request has a hard estimated cost ceiling of $0.25. The ledger reserves conservative maximum cost before creating a Sailbox. It prices DeepSeek input without assuming cache discounts and reserves the configured maximum Sailbox resource use.
+Every pull request has a hard estimated cost ceiling of $0.25. The ledger reserves conservative maximum cost before creating a Sailbox. It prices GPT-OSS input without assuming cache discounts and reserves the configured maximum Sailbox resource use.
 
 The app reports provider token usage and estimated Sailbox cost separately. It does not present a local estimate as settled billing.
 

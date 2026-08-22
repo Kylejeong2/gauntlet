@@ -10,7 +10,7 @@ The design must trace every acceptance criterion in ProductSpec revision 1 to an
 
 ## Crash safety and idempotency
 
-The webhook must acknowledge before long work begins. Duplicate delivery, process restart, expired worker lease, orphaned Sailbox, and repeated GitHub publication must converge on one review for one head SHA. A high score encodes these properties in storage keys and state transitions instead of relying on process memory.
+The webhook must acknowledge before long work begins. Duplicate delivery, process restart, expired worker lease, orphaned Sailbox, and repeated GitHub publication must converge on one marked comment per reviewer and one summary for one head SHA. A high score encodes these properties in storage keys and state transitions instead of relying on process memory.
 
 ## Hostile-code containment
 
@@ -30,8 +30,8 @@ The system should run as one understandable Node 22 service for the first open-s
 
 ## Developer experience
 
-The final GitHub output must show selected reviewer scores, examined areas, coverage, cost, and no more than five verified findings in one review. A high score makes quiet publication a deterministic policy, not a prompt suggestion.
+The final GitHub output must show each selected reviewer score and examined areas in a separate comment, then coverage, cost, and no more than five verified findings in a compact summary review. A high score makes quiet publication a deterministic policy, not a prompt suggestion.
 
 ## Verification plan
 
-The design must name failing-first tests for each risky boundary and a live path through GitHub, DeepSeek V4 Flash on Sail, and Sailboxes. A high score treats live verification as a separate gate from unit and integration tests.
+The design must name failing-first tests for each risky boundary and a live path through GitHub, the selected cheap Sail model, and Sailboxes. A high score treats live verification as a separate gate from unit and integration tests.

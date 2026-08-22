@@ -76,7 +76,7 @@ describe("ProductSpec fixture evaluations", () => {
     if (result.kind === "publish") expect(result.comments).toEqual([]);
   });
 
-  it("EVAL-3 publishes the scorecard without positive inline comments", () => {
+  it("EVAL-3 publishes separate reviewer scores without positive inline comments", () => {
     const result = reducePublication({
       ...baseInput,
       reports: [
@@ -95,7 +95,10 @@ describe("ProductSpec fixture evaluations", () => {
     expect(result.kind).toBe("publish");
     if (result.kind === "publish") {
       expect(result.comments).toEqual([]);
-      expect(result.body).toContain("security: 5/5");
+      expect(result.reviewerComments).toHaveLength(1);
+      expect(result.reviewerComments[0]?.body).toContain(
+        "Security reviewer: 5/5",
+      );
     }
   });
 });

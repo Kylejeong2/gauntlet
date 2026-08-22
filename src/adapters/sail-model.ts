@@ -11,10 +11,10 @@ import type {
   ReviewerReport,
 } from "../domain/types.js";
 
-export const SAIL_MODEL = "deepseek/deepseek-v4-flash-0731";
+export const SAIL_MODEL = "openai/gpt-oss-120b";
 export const SAIL_API_URL = "https://api.sailresearch.com/v1/responses";
-export const SAIL_INPUT_USD_PER_MILLION = 0.09;
-export const SAIL_OUTPUT_USD_PER_MILLION = 0.18;
+export const SAIL_INPUT_USD_PER_MILLION = 0.06;
+export const SAIL_OUTPUT_USD_PER_MILLION = 0.4;
 
 const responseEnvelopeSchema = z.looseObject({
   id: z.string().min(1),
@@ -101,7 +101,7 @@ export class SailModelClient {
     this.#apiKey = options.apiKey;
     this.#fetcher = options.fetcher ?? fetch;
     this.#apiUrl = options.apiUrl ?? SAIL_API_URL;
-    this.#retryDelaysMs = options.retryDelaysMs ?? [1_000, 3_000, 7_000];
+    this.#retryDelaysMs = options.retryDelaysMs ?? [15_000, 30_000, 60_000];
     this.#audit =
       options.audit ??
       ((event) => {
@@ -133,7 +133,9 @@ export class SailModelClient {
       reviewerReportJsonSchema(request.reviewer),
       { operation: "review", correlationId: request.reviewer },
     );
-    const parsed = reviewerReportSchema.safeParse(JSON.parse(result.value));
+    const parsed = reviewerReportSchema.safeParse(
+      parseJsonObject(result.value),
+    );
     if (!parsed.success)
       throw new Error(
         `Invalid Sail reviewer response: ${parsed.error.issues
@@ -174,7 +176,9 @@ export class SailModelClient {
       challengeJsonSchema,
       { operation: "challenge", correlationId: request.finding.id },
     );
-    const output = challengeOutputSchema.safeParse(JSON.parse(result.value));
+    const output = challengeOutputSchema.safeParse(
+      parseJsonObject(result.value),
+    );
     if (!output.success) throw new Error("Invalid Sail challenge response");
     const verdict = challengeVerdictSchema.parse({
       kind: output.data.outcome,
@@ -201,8 +205,8 @@ export class SailModelClient {
     const body = JSON.stringify({
       model: SAIL_MODEL,
       metadata: { completion_window: "asap" },
-      store: false,
-      max_output_tokens: 1500,
+      reasoning: { effort: "low" },
+      max_output_tokens: 3000,
       input: [{ role: "user", content: prompt }],
       text: {
         format: {
@@ -229,7 +233,7 @@ export class SailModelClient {
       responseStatus = response.status;
       if (response.ok) break;
       const delay = this.#retryDelaysMs[attempt];
-      const retryable = response.status === 429 || response.status >= 500;
+      const retryable = response.status === 429;
       if (!retryable || delay === undefined)
         throw new Error(
           `Sail request failed (${String(response.status)}): ${rawBody.slice(0, 500)}`,
@@ -280,12 +284,18 @@ const extractOutputText = (
   for (const item of output) {
     const parsed = z
       .looseObject({
-        content: z.array(z.looseObject({ text: z.string().optional() })),
+        content: z.array(
+          z.looseObject({
+            type: z.string().optional(),
+            text: z.string().optional(),
+          }),
+        ),
       })
       .safeParse(item);
     if (parsed.success) {
       const text = parsed.data.content.find(
-        (content) => content.text !== undefined,
+        (content) =>
+          content.type === "output_text" && content.text !== undefined,
       )?.text;
       if (text !== undefined) return text;
     }
@@ -297,6 +307,22 @@ const wait = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+
+const parseJsonObject = (value: string): unknown => {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    const end = value.lastIndexOf("}");
+    for (let start = value.indexOf("{"); start >= 0 && start < end;) {
+      try {
+        return JSON.parse(value.slice(start, end + 1)) as unknown;
+      } catch {
+        start = value.indexOf("{", start + 1);
+      }
+    }
+    throw new Error("Sail response contained no valid JSON object");
+  }
+};
 
 const findingProperties = (reviewer: ReviewerId) => ({
   id: { type: "string", minLength: 1 },

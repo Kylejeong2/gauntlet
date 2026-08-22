@@ -17,18 +17,18 @@ The process environment is the configuration boundary. Gauntlet does not forward
 
 ## Inference contract
 
-The model slug is fixed to `deepseek/deepseek-v4-flash-0731`. Requests use Sail's OpenAI-compatible Responses endpoint at `https://api.sailresearch.com/v1/responses` with:
+The model slug is fixed to `openai/gpt-oss-120b`. Requests use Sail's OpenAI-compatible Responses endpoint at `https://api.sailresearch.com/v1/responses` with:
 
 - `metadata.completion_window` set to `asap`.
-- `store` set to `false`.
+- `reasoning.effort` set to `low`.
 - Strict JSON Schema output.
-- A maximum of 1,500 output tokens.
+- A maximum of 3,000 output tokens.
 - A 180-second request timeout.
-- Bounded retries for HTTP 429 and 5xx responses.
+- Serial model calls and bounded retries for HTTP 429 responses.
 
-Gauntlet does not silently change models. A provider rejection, timeout, malformed response, missing reviewer report, or inconclusive challenge fails closed.
+Gauntlet does not silently change models. A provider rejection, timeout, malformed response, missing reviewer report, or inconclusive challenge fails closed. GPT-OSS may emit a reasoning item before its message item; Gauntlet reads only `output_text` content and validates the extracted JSON again with Zod.
 
-The local price estimate uses $0.09 per million input tokens and $0.18 per million output tokens. Prices are configuration facts captured on 2026-08-22, not a billing guarantee. The app reads actual response token counts and converts them to integer microdollars.
+The local price estimate uses $0.06 per million input tokens and $0.40 per million output tokens. Prices are configuration facts captured on 2026-08-22, not a billing guarantee. The app reads actual response token counts and converts them to integer microdollars.
 
 ## Sailbox contract
 

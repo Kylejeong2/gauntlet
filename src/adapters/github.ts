@@ -308,6 +308,20 @@ export class GitHubReviewClient {
       throw new Error("Pull request repository is not public");
     if (commitSha(pull.data.head.sha) !== plan.headSha)
       throw new Error("Pull request head changed before publication");
+    const reviews = await paginate((page) =>
+      this.#api.listReviews({ ...this.#params(), per_page: 100, page }),
+    );
+    for (const reviewerComment of plan.reviewerComments) {
+      const marker = `<!-- gauntlet-reviewer:${plan.runId}:${reviewerComment.reviewer} -->`;
+      if (reviews.some((review) => review.body?.includes(marker))) continue;
+      await this.#api.createReview({
+        ...this.#params(),
+        commit_id: plan.headSha,
+        event: "COMMENT",
+        body: reviewerComment.body,
+        comments: [],
+      });
+    }
     const result = await this.#api.createReview({
       ...this.#params(),
       commit_id: plan.headSha,

@@ -115,6 +115,60 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       ]);
   });
 
+  it("requires cross-specialist corroboration and collapses same-line duplicates", () => {
+    const security = finding({ id: findingId("security-injection") });
+    const adversarial = finding({
+      id: findingId("adversarial-injection"),
+      reviewer: reviewerId("adversarial-testing"),
+      title: "Shell injection through name",
+      stableIdentity: "shell-injection:name",
+    });
+    const speculative = finding({
+      id: findingId("documentation-guess"),
+      reviewer: reviewerId("documentation"),
+      location: { path: "README.md", line: 4 },
+      severity: "medium",
+      title: "Missing example",
+      stableIdentity: "readme-example",
+    });
+    const candidates = [security, adversarial, speculative];
+    const result = reducePublication({
+      runId: runId("run-consensus"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [
+        reviewerId("security"),
+        reviewerId("adversarial-testing"),
+        reviewerId("documentation"),
+      ],
+      reports: candidates.map(report),
+      challenges: candidates.map((candidate) => ({
+        kind: "confirmed" as const,
+        findingId: candidate.id,
+        reason: "Confirmed.",
+      })),
+      changedLines: [
+        { path: "src/index.ts", lines: [12] },
+        { path: "README.md", lines: [4] },
+      ],
+      priorStableIdentities: [],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(10_000),
+      durationMs: 1000,
+    });
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish") {
+      expect(result.reviewerComments).toHaveLength(3);
+      expect(result.reviewerComments[0]?.body).toContain(
+        "Security reviewer: 2/5",
+      );
+      expect(result.comments).toHaveLength(1);
+      expect(result.comments[0]?.finding.location).toEqual({
+        path: "src/index.ts",
+        line: 12,
+      });
+    }
+  });
+
   it("deduplicates semantically, suppresses prior identities, ranks deterministically, and caps at five", () => {
     const candidates = Array.from({ length: 8 }, (_, index) =>
       finding({

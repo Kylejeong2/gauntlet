@@ -19,9 +19,15 @@ describe("webhook authentication", () => {
 });
 
 describe("GitHub review delivery", () => {
-  it("builds an immutable snapshot and submits one COMMENT review", async () => {
+  it("builds an immutable snapshot, separates reviewer comments, and submits one finding review", async () => {
     const createReview = vi
       .fn<PullRequestApi["createReview"]>()
+      .mockResolvedValueOnce({
+        data: { id: 91 },
+      })
+      .mockResolvedValueOnce({
+        data: { id: 92 },
+      })
       .mockResolvedValue({
         data: { id: 99 },
       });
@@ -88,8 +94,19 @@ describe("GitHub review delivery", () => {
 
     const publication = await client.publish({
       kind: "publish",
+      runId: runId("run-publish"),
       headSha: commitSha("b".repeat(40)),
-      body: "## Gauntlet review",
+      body: "## Gauntlet summary",
+      reviewerComments: [
+        {
+          reviewer: reviewerId("security"),
+          body: "## Security reviewer: 1/5\n\nConfirmed injection.\n\n<!-- gauntlet-reviewer:run-publish:security -->",
+        },
+        {
+          reviewer: reviewerId("performance"),
+          body: "## Performance reviewer: 5/5\n\nNo performance defect.\n\n<!-- gauntlet-reviewer:run-publish:performance -->",
+        },
+      ],
       comments: [
         {
           finding: {
@@ -109,13 +126,32 @@ describe("GitHub review delivery", () => {
       ],
     });
     expect(publication).toEqual({ reviewId: 99 });
-    expect(createReview).toHaveBeenCalledWith({
+    expect(createReview).toHaveBeenCalledTimes(3);
+    expect(createReview).toHaveBeenNthCalledWith(1, {
       owner: "Kylejeong2",
       repo: "gauntlet",
       pull_number: 1,
       commit_id: "b".repeat(40),
       event: "COMMENT",
-      body: "## Gauntlet review",
+      body: "## Security reviewer: 1/5\n\nConfirmed injection.\n\n<!-- gauntlet-reviewer:run-publish:security -->",
+      comments: [],
+    });
+    expect(createReview).toHaveBeenNthCalledWith(2, {
+      owner: "Kylejeong2",
+      repo: "gauntlet",
+      pull_number: 1,
+      commit_id: "b".repeat(40),
+      event: "COMMENT",
+      body: "## Performance reviewer: 5/5\n\nNo performance defect.\n\n<!-- gauntlet-reviewer:run-publish:performance -->",
+      comments: [],
+    });
+    expect(createReview).toHaveBeenNthCalledWith(3, {
+      owner: "Kylejeong2",
+      repo: "gauntlet",
+      pull_number: 1,
+      commit_id: "b".repeat(40),
+      event: "COMMENT",
+      body: "## Gauntlet summary",
       comments: [
         {
           path: "src/index.ts",

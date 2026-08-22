@@ -1,4 +1,4 @@
-import { App, Sailbox } from "@sailresearch/sdk";
+import { App, Image, Sailbox } from "@sailresearch/sdk";
 import { z } from "zod";
 import type { ReviewRunInput } from "../application/review-runner.js";
 import { reviewerId, usdMicros, type ReviewerId } from "../domain/ids.js";
@@ -25,6 +25,7 @@ export type SailboxFactory = Readonly<{
   create: (
     options: Readonly<{
       name: string;
+      image: "devbox";
       size: "s";
       memoryLimitGib: number;
       diskLimitGib: number;
@@ -49,13 +50,21 @@ export class SailSdkFactory implements SailboxFactory {
   public async create(
     options: Readonly<{
       name: string;
+      image: "devbox";
       size: "s";
       memoryLimitGib: number;
       diskLimitGib: number;
     }>,
   ): Promise<SailboxInstance> {
     const app = await App.find(this.#appName, { mintIfMissing: true });
-    const box = await Sailbox.create({ app, ...options });
+    const box = await Sailbox.create({
+      app,
+      name: options.name,
+      size: options.size,
+      memoryLimitGib: options.memoryLimitGib,
+      diskLimitGib: options.diskLimitGib,
+      image: Image.devbox(),
+    });
     return {
       id: box.sailboxId,
       run: async (argv, runOptions) => {
@@ -117,12 +126,19 @@ export class SailboxReviewEnvironment {
     const safeRunName = input.runId.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 48);
     const instance = await this.#factory.create({
       name: `gauntlet-${safeRunName}`,
+      image: "devbox",
       size: "s",
       memoryLimitGib: 2,
       diskLimitGib: 8,
     });
     this.#audit({ kind: "sailbox_created", sailboxId: instance.id });
     try {
+      await checkedRun(
+        instance,
+        ["mkdir", "-p", "/workspace"],
+        "/",
+        this.#audit,
+      );
       await checkedRun(
         instance,
         [

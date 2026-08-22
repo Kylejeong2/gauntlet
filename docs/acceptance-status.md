@@ -12,7 +12,7 @@ This reference maps [ProductSpec revision 1](../specs/gauntlet.product-spec.md) 
 | AC-6      | Local pass, live pending      | The candidate-finding schema requires a changed location, trigger, severity, confidence, evidence, action, and stable identity.                                                                                     |
 | AC-7      | Local pass, live pending      | `tests/orchestrator.test.ts` proves one separate challenge call per candidate and fail-closed provider behavior.                                                                                                    |
 | AC-8      | Local pass, live pending      | `tests/policies.test.ts` proves exact-line validation, stable-identity suppression, deduplication, ranking, and the five-comment limit.                                                                             |
-| AC-9      | Local pass, live pending      | Publication tests prove one COMMENT review with scorecard, coverage, cost, duration, and only verified inline findings.                                                                                             |
+| AC-9      | Local pass, live pending      | Publication tests prove one readable COMMENT review per specialist plus a compact summary with coverage, cost, duration, and only verified inline findings.                                                         |
 | AC-10     | Local pass, live pending      | Same-head delivery idempotency, new-head runs, prior stable identities, and the pre-publication head check prevent stale or repeated findings.                                                                      |
 | AC-11     | Local pass and provider smoke | Sailbox contract tests and the recorded live box prove public HTTPS clone, exact detached head, empty command environments, timeouts, cleanup, and termination.                                                     |
 | AC-12     | Local pass, live pending      | Sailbox tests prove lockfile-aware pnpm, npm, and Yarn installation plus manifest-aware test, lint, typecheck, build, and documentation commands without shell interpolation.                                       |
@@ -24,8 +24,8 @@ This reference maps [ProductSpec revision 1](../specs/gauntlet.product-spec.md) 
 
 ## AI evaluation status
 
-| Evaluation | Status                                   | Evidence                                                                                                                                          |
-| ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EVAL-1     | Deterministic fixture pass, live pending | The reducer publishes a confirmed command injection on a valid changed line. Public PR #1 is the installed-App fixture.                           |
-| EVAL-2     | Deterministic fixture pass, live pending | The reducer suppresses a disproved finding and publishes a scorecard without positive inline comments. Public PR #2 is the installed-App control. |
-| EVAL-3     | Deterministic fixture pass               | Policy tests remove duplicates and invalid locations before the five-finding ceiling.                                                             |
+| Evaluation | Status                                   | Evidence                                                                                                                                                         |
+| ---------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EVAL-1     | Deterministic fixture pass, live pending | The reducer publishes a confirmed command injection on a valid changed line. Public PR #1 is the installed-App fixture.                                          |
+| EVAL-2     | Deterministic fixture pass, live pending | The reducer suppresses a disproved finding and publishes separate specialist scores without positive inline comments. Public PR #2 is the installed-App control. |
+| EVAL-3     | Deterministic fixture pass               | Policy tests remove duplicates and invalid locations before the five-finding ceiling.                                                                            |

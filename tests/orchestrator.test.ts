@@ -42,6 +42,8 @@ describe("review orchestration", () => {
     const challenged: string[] = [];
     const publications: unknown[] = [];
     let terminated = false;
+    let activeModelRequests = 0;
+    let maximumActiveModelRequests = 0;
     const auditEvents: string[] = [];
     const ports: ReviewPorts = {
       audit: (event) => {
@@ -55,7 +57,14 @@ describe("review orchestration", () => {
         },
       },
       model: {
-        review: ({ reviewer }) => {
+        review: async ({ reviewer }) => {
+          activeModelRequests += 1;
+          maximumActiveModelRequests = Math.max(
+            maximumActiveModelRequests,
+            activeModelRequests,
+          );
+          await Promise.resolve();
+          activeModelRequests -= 1;
           reviewed.push(reviewer);
           const report: ReviewerReport = {
             reviewer,
@@ -64,7 +73,7 @@ describe("review orchestration", () => {
             examinedAreas: ["changed lines"],
             findings: reviewer === "security" ? [candidate] : [],
           };
-          return Promise.resolve({ report, cost: usdMicros(100) });
+          return { report, cost: usdMicros(100) };
         },
         challenge: ({ finding }) => {
           challenged.push(finding.id);
@@ -104,6 +113,7 @@ describe("review orchestration", () => {
     expect(reviewed).toEqual(CORE_REVIEWERS.map((reviewer) => reviewer.id));
     expect(challenged).toEqual([candidate.id]);
     expect(publications).toHaveLength(1);
+    expect(maximumActiveModelRequests).toBe(1);
     expect(result.reviewId).toBe(42);
     expect(result.cost).toBe(usdMicros(850));
     expect(terminated).toBe(true);

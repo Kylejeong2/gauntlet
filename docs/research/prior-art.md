@@ -52,7 +52,7 @@ The implementation targets the current official contracts:
 - [The Sailbox API](https://docs.sailresearch.com/sailbox-sdk) provides create, command execution, file transfer, lifecycle, and guaranteed termination operations.
 - [Sailbox pricing](https://docs.sailresearch.com/sailboxes-pricing) charges by observed CPU, memory, and disk use, plus a one-time creation fee.
 
-The live account listed `deepseek/deepseek-v4-flash-0731` on 2026-08-22. A minimal inference request returned `unsupported_asap_only_request` despite using the model's documented ASAP window. Gauntlet treats that response as an unresolved provider-contract failure until a later live smoke test succeeds. The application must surface this error clearly and must not silently switch models.
+The live account listed `deepseek/deepseek-v4-flash-0731` on 2026-08-22. An early synchronous inference completed, but the model later returned sustained 429 capacity responses. Its ASAP-only route also rejected background mode and idempotency keys. Because the product brief allowed DeepSeek or another cheap Sail model, Gauntlet explicitly changed its fixed model to `openai/gpt-oss-120b`; it still never performs a silent runtime fallback.
 
 ## Decisions carried into Gauntlet
 

@@ -6,6 +6,10 @@ import type {
 } from "./types.js";
 
 type PublicationComment = Readonly<{ finding: CandidateFinding; body: string }>;
+type ReviewerComment = Readonly<{
+  reviewer: ReviewerReport["reviewer"];
+  body: string;
+}>;
 
 export type PublicationPlan =
   | Readonly<{
@@ -20,8 +24,10 @@ export type PublicationPlan =
     }>
   | Readonly<{
       kind: "publish";
+      runId: PublicationInput["runId"];
       headSha: PublicationInput["headSha"];
       body: string;
+      reviewerComments: readonly ReviewerComment[];
       comments: readonly PublicationComment[];
     }>;
 
@@ -41,13 +47,11 @@ const strongerFirst = (
   right.evidence.length - left.evidence.length ||
   left.id.localeCompare(right.id);
 
-const scorecard = (reports: readonly ReviewerReport[]): string =>
-  reports
-    .map(
-      (report) =>
-        `- ${report.reviewer}: ${String(report.readiness)}/5 - ${report.rationale}`,
-    )
-    .join("\n");
+const reviewerTitle = (reviewer: string): string =>
+  reviewer
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
 export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const reportCounts = new Map<string, number>();
@@ -106,8 +110,30 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     .filter((candidate) => !prior.has(candidate.stableIdentity))
     .sort(strongerFirst);
 
-  const unique = new Map<string, CandidateFinding>();
+  const byLocation = new Map<string, CandidateFinding[]>();
   for (const candidate of candidates) {
+    const key = `${candidate.location.path}:${String(candidate.location.line)}`;
+    const existing = byLocation.get(key) ?? [];
+    byLocation.set(key, [...existing, candidate]);
+  }
+  const corroborated =
+    input.selectedReviewers.length === 1
+      ? candidates
+      : [...byLocation.values()].flatMap((atLocation) => {
+          const reviewers = new Set(
+            atLocation.map((candidate) => candidate.reviewer),
+          );
+          const exceptional = atLocation.some(
+            (candidate) =>
+              candidate.severity === "critical" && candidate.confidence >= 0.9,
+          );
+          if (reviewers.size < 2 && !exceptional) return [];
+          const strongest = [...atLocation].sort(strongerFirst)[0];
+          return strongest === undefined ? [] : [strongest];
+        });
+
+  const unique = new Map<string, CandidateFinding>();
+  for (const candidate of corroborated) {
     if (!unique.has(candidate.stableIdentity))
       unique.set(candidate.stableIdentity, candidate);
   }
@@ -120,6 +146,17 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     input.coverageOmissions.length === 0
       ? "None"
       : input.coverageOmissions.join("; ");
-  const body = `## Gauntlet review\n\n${scorecard(selectedReports)}\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${String(input.durationMs)}ms\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
-  return { kind: "publish", headSha: input.headSha, body, comments };
+  const reviewerComments = selectedReports.map((report) => ({
+    reviewer: report.reviewer,
+    body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
+  }));
+  const body = `## Gauntlet summary\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${String(input.durationMs)}ms\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
+  return {
+    kind: "publish",
+    runId: input.runId,
+    headSha: input.headSha,
+    body,
+    reviewerComments,
+    comments,
+  };
 };
