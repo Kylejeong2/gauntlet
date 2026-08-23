@@ -1,7 +1,7 @@
 <h1 align="center">Gauntlet</h1>
 
 <p align="center">
-  <img src="assets/gauntlet-app-logo-512.png" alt="Infinity Gauntlet photograph" width="180" />
+  <img src="assets/gauntlet-app-logo-512.png" alt="Gold cartoon gauntlet on a purple background" width="180" />
 </p>
 
 Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses GPT-OSS 120B through Sail and executes repository checks in ephemeral Sailboxes.
