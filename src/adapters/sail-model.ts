@@ -256,7 +256,7 @@ export class SailModelClient {
     });
     const body = JSON.stringify({
       model: SAIL_MODEL,
-      metadata: { completion_window: "asap" },
+      metadata: { completion_window: "flex" },
       reasoning: { effort: "low" },
       max_output_tokens: 6000,
       input: [{ role: "user", content: prompt }],
