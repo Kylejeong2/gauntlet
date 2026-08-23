@@ -52,7 +52,7 @@ The implementation targets the current official contracts:
 - [The Sailbox API](https://docs.sailresearch.com/sailbox-sdk) provides create, command execution, file transfer, lifecycle, and guaranteed termination operations.
 - [Sailbox pricing](https://docs.sailresearch.com/sailboxes-pricing) charges by observed CPU, memory, and disk use, plus a one-time creation fee.
 
-The live account listed `deepseek/deepseek-v4-flash-0731` on 2026-08-22. An early synchronous inference completed, but the model later returned sustained 429 capacity responses. Its ASAP-only route also rejected background mode and idempotency keys. Because the product brief allowed DeepSeek or another cheap Sail model, Gauntlet explicitly changed its fixed model to `openai/gpt-oss-120b`; it still never performs a silent runtime fallback.
+The live account listed `deepseek/deepseek-v4-flash-0731` on 2026-08-22. An early synchronous inference completed, but the model later returned sustained 429 capacity responses. Its ASAP-only route also rejected background mode and idempotency keys. Because the product brief allowed DeepSeek or another cheap Sail model, Gauntlet explicitly changed its fixed model to `openai/gpt-oss-120b`; it did not perform a silent runtime fallback. On 2026-08-23, Sail's authenticated model list and official pricing page again exposed DeepSeek V4 Flash, so Gauntlet deliberately restored `deepseek/deepseek-v4-flash-0731` as its fixed model and reverified the provider contract.
 
 ## Decisions carried into Gauntlet
 

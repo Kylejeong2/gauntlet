@@ -4,7 +4,7 @@
   <img src="assets/gauntlet-app-logo-512.png" alt="Gold cartoon gauntlet on a purple background" width="180" />
 </p>
 
-Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses GPT-OSS 120B through Sail and executes repository checks in ephemeral Sailboxes.
+Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses DeepSeek V4 Flash through Sail and executes repository checks in ephemeral Sailboxes.
 
 The product goal is strict. Every visible finding must survive a separate challenge. Each specialist gets a readable top-level comment, while verified code defects stay inline and speculative findings stay hidden.
 
@@ -12,7 +12,7 @@ The product goal is strict. Every visible finding must survive a separate challe
 
 Gauntlet has a working implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The deterministic gate covers domain, SQLite, GitHub payload, exact-SHA snapshots, Sail requests, Sailbox lifecycle, orchestration, challenges, redacted logging, and publication policy contracts.
 
-Live verification on 2026-08-22 completed the installed GitHub App flow on two public fixture pull requests. The command-injection run published eight separate specialist comments and one verified inline finding for $0.013657; the documentation-only control published eight specialist comments and zero inline findings for $0.012065. Both credential-free Sailboxes terminated, and replaying the first PR at the same head created no duplicate review. Gauntlet never silently switches models.
+Live verification on 2026-08-22 completed the installed GitHub App flow on two public fixture pull requests. The command-injection run published eight separate specialist comments and one verified inline finding for $0.013657; the documentation-only control published eight specialist comments and zero inline findings for $0.012065. Both credential-free Sailboxes terminated, and replaying the first PR at the same head created no duplicate review. Those historical runs used GPT-OSS 120B. The current fixed model is DeepSeek V4 Flash, whose Sail request contract was reverified on 2026-08-23. Gauntlet never silently switches models.
 
 ## Reviewers
 
@@ -55,11 +55,11 @@ The implemented publication reducer enforces these rules without provider or Git
 3. The planner reserves the full worst-case run under $0.25.
 4. Gauntlet creates one credential-free Sailbox, checks out the exact public head SHA, and scopes every diff command to the persisted merge-base SHA.
 5. Repository setup and standard checks run with bounded time and output.
-6. Up to ten GPT-OSS reviewers inspect the snapshot and bounded reviewer-specific Sailbox evidence.
+6. Up to ten DeepSeek V4 Flash reviewers inspect the snapshot and bounded reviewer-specific Sailbox evidence.
 7. Each reviewer returns one score and at most three candidate findings.
-8. A separate GPT-OSS request tries to disprove every finding.
+8. A separate DeepSeek V4 Flash request tries to disprove every finding.
 9. Pure policy rejects unconfirmed, duplicate, stale, or unanchorable findings.
-10. One final bounded GPT-OSS call synthesizes the completed organization into a PR-level briefing.
+10. One final bounded DeepSeek V4 Flash call synthesizes the completed organization into a PR-level briefing.
 11. Gauntlet publishes one top-level comment per specialist, then the expanded summary review with verified inline findings and copyable fix prompts, and terminates the Sailbox.
 
 Read [the architecture](docs/architecture.md) for the state model, tool limits, database tables, budget rules, and recovery behavior.
@@ -76,7 +76,7 @@ Read [the security model](docs/security.md) for the full threat model, credentia
 
 ## Cost limit
 
-Every pull request has a hard estimated cost ceiling of $0.25. The ledger reserves conservative maximum cost before creating a Sailbox. It prices GPT-OSS input without assuming cache discounts and reserves the configured maximum Sailbox resource use.
+Every pull request has a hard estimated cost ceiling of $0.25. The ledger reserves conservative maximum cost before creating a Sailbox. It prices DeepSeek V4 Flash input without assuming cache discounts and reserves the configured maximum Sailbox resource use.
 
 The app reports provider token usage and estimated Sailbox cost separately. It does not present a local estimate as settled billing.
 

@@ -17,18 +17,18 @@ The process environment is the configuration boundary. Gauntlet does not forward
 
 ## Inference contract
 
-The model slug is fixed to `openai/gpt-oss-120b`. Requests use Sail's OpenAI-compatible Responses endpoint at `https://api.sailresearch.com/v1/responses` with:
+The model slug is fixed to `deepseek/deepseek-v4-flash-0731`. Requests use Sail's OpenAI-compatible Responses endpoint at `https://api.sailresearch.com/v1/responses` with:
 
 - `metadata.completion_window` set to `asap`.
 - `reasoning.effort` set to `low`.
 - Strict JSON Schema output.
 - A 180-second request timeout.
 - Serial model calls and bounded retries for HTTP 429 responses.
-- A 6,000-token response ceiling, with concise schema-only output instructions, so GPT-OSS reasoning does not truncate a specialist report before its validated JSON object.
+- A 6,000-token response ceiling with concise schema-only output instructions.
 
-Gauntlet does not silently change models. A provider rejection, timeout, malformed response, missing reviewer report, malformed final synthesis, or inconclusive challenge fails closed. GPT-OSS may emit a reasoning item before its message item; Gauntlet reads only `output_text` content and validates the extracted JSON again with Zod. The final synthesis is one additional structured request after every specialist and challenge completes. It returns a headline, a 120-to-350-word overview, and up to six items each for changes, risks, and recommended actions.
+Gauntlet does not silently change models. A provider rejection, timeout, malformed response, missing reviewer report, malformed final synthesis, or inconclusive challenge fails closed. The client reads only `output_text` content from the response envelope and validates the extracted JSON again with Zod. The final synthesis is one additional structured request after every specialist and challenge completes. It returns a headline, a 120-to-350-word overview, and up to six items each for changes, risks, and recommended actions.
 
-The local price estimate uses $0.06 per million input tokens and $0.40 per million output tokens. Prices are configuration facts captured on 2026-08-22, not a billing guarantee. The app reads actual response token counts and converts them to integer microdollars.
+The local price estimate uses $0.09 per million input tokens and $0.18 per million output tokens. Prices are configuration facts captured from Sail's official pricing page on 2026-08-23, not a billing guarantee. The app reads actual response token counts and converts them to integer microdollars.
 
 ## Sailbox contract
 

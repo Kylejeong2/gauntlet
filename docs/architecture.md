@@ -6,13 +6,13 @@ Status: accepted design for ProductSpec revision 1. Implementation and live veri
 
 The implementation provides the SDK-independent domain and SQLite foundation described here: branded boundary constructors, discriminated run states, the ten-entry reviewer registry, strict reviewer and finding schemas, the integer-microdollar budget policy, the pure challenge-gated publication reducer, structured-value redaction, `deriveNextWork`, direct migrations, and durable acceptance, lease, and budget-reservation operations.
 
-Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, GPT-OSS 120B through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
+Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
 
 ## What Gauntlet does
 
 Gauntlet receives a public pull request webhook and reviews one immutable head commit. Eight core specialists inspect every eligible pull request. Each specialist publishes a separate readable GitHub review comment with its readiness score, rationale, and examined areas. Gauntlet can add test-quality and concurrency specialists when the diff calls for them. Every specialist returns a readiness score from 1 through 5 and at most three candidate findings.
 
-A candidate finding is not a GitHub comment. A new GPT-OSS 120B request tries to disprove it. Gauntlet publishes only confirmed findings that point to changed lines in the exact reviewed head. Multi-specialist runs require same-line corroboration from two reviewers, except for critical findings with at least 0.9 confidence. Same-line duplicates collapse to the strongest evidence, and the final summary review contains at most five inline comments.
+A candidate finding is not a GitHub comment. A new DeepSeek V4 Flash request tries to disprove it. Gauntlet publishes only confirmed findings that point to changed lines in the exact reviewed head. Multi-specialist runs require same-line corroboration from two reviewers, except for critical findings with at least 0.9 confidence. Same-line duplicates collapse to the strongest evidence, and the final summary review contains at most five inline comments.
 
 ## System map
 
@@ -235,7 +235,7 @@ The planner reserves a conservative maximum for the entire mandatory run before 
 - One final structured synthesis request after all reports and challenges complete.
 - GitHub publication and cleanup work that does not have a provider token charge.
 
-The GPT-OSS estimate ignores cached-input discounts. It uses the full input rate, the bounded input size, and the maximum output size. Provider usage settles a reservation when usage is present. Missing usage retains the conservative estimate.
+The DeepSeek V4 Flash estimate ignores cached-input discounts. It uses the full input rate, the bounded input size, and the maximum output size. Provider usage settles a reservation when usage is present. Missing usage retains the conservative estimate.
 
 The planner does not start a partial organization. If the full worst-case plan cannot fit, Gauntlet records `budget_exhausted` before paid work begins.
 
@@ -264,7 +264,7 @@ The GitHub adapter checks the current head, then creates one COMMENT review with
 | --- | --- |
 | `RunStore` | Accept runs, claim leases, persist snapshots, work, budgets, reports, challenges, Sailboxes, and publication receipts. |
 | `GitHubPort` | Fetch the immutable snapshot, mint installation clients, reconcile prior finding identities, and publish idempotent reviewer comments plus one summary review. |
-| `ModelPort` | Run serialized GPT-OSS reviewer, challenge, and final synthesis requests with strict schemas and typed response parsing. |
+| `ModelPort` | Run serialized DeepSeek V4 Flash reviewer, challenge, and final synthesis requests with strict schemas and typed response parsing. |
 | `SailboxPort` | Create, execute bounded argument-vector commands, inspect lifecycle, and terminate. |
 | `BudgetLedger` | Reserve, settle, and report microdollar costs under one transaction owner. |
 | `Clock` | Make leases, durations, and retry tests deterministic. |
@@ -313,7 +313,7 @@ SQLite integration tests cover duplicate deliveries, same-head deliveries, new-h
 
 Contract tests cover GitHub webhook fixtures, signatures, pagination, review payloads, Sail structured responses and usage, Sailbox create and command results, and all strict schemas.
 
-Fixture evaluations cover the three ProductSpec AI eval groups. Live tests use only the public Gauntlet repository and opt-in credentials. The completed live gate followed signed webhooks through GPT-OSS, real Sailboxes, and visible GitHub reviews, then confirmed termination, reported cost, clean-change suppression, and same-head idempotency.
+Fixture evaluations cover the three ProductSpec AI eval groups. Live tests use only the public Gauntlet repository and opt-in credentials. The completed 2026-08-22 installed-App gate followed signed webhooks through the then-current GPT-OSS configuration, real Sailboxes, and visible GitHub reviews, then confirmed termination, reported cost, clean-change suppression, and same-head idempotency. The fixed DeepSeek V4 Flash request contract was live-verified separately on 2026-08-23; a new installed-App fixture run remains a distinct release gate.
 
 ## Accepted tradeoffs
 

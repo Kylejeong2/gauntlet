@@ -7,7 +7,7 @@ import {
 } from "../src/adapters/sailbox-tools.js";
 
 describe("Sail model contract", () => {
-  it("uses GPT-OSS 120B through Sail's synchronous ASAP contract and accounts for usage", async () => {
+  it("uses DeepSeek V4 Flash through Sail's synchronous ASAP contract and accounts for usage", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -53,7 +53,7 @@ describe("Sail model contract", () => {
     });
 
     expect(result.report.readiness).toBe(5);
-    expect(result.cost).toBe(usdMicros(140));
+    expect(result.cost).toBe(usdMicros(126));
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, init] = fetcher.mock.calls[0] ?? [];
     expect(url).toBe("https://api.sailresearch.com/v1/responses");
@@ -61,7 +61,7 @@ describe("Sail model contract", () => {
       throw new Error("Expected JSON request body");
     const request = JSON.parse(init.body) as Record<string, unknown>;
     expect(request).toMatchObject({
-      model: "openai/gpt-oss-120b",
+      model: "deepseek/deepseek-v4-flash-0731",
       metadata: { completion_window: "asap" },
       reasoning: { effort: "low" },
       max_output_tokens: 6000,
@@ -126,7 +126,7 @@ describe("Sail model contract", () => {
 
     expect(result.summary.headline).toBe("One verified blocker remains");
     expect(result.summary.keyRisks).toEqual(["Arbitrary command execution"]);
-    expect(result.cost).toBe(usdMicros(130));
+    expect(result.cost).toBe(usdMicros(90));
     if (typeof fetcher.mock.calls[0]?.[1]?.body !== "string")
       throw new Error("Expected JSON request body");
     const request = JSON.parse(fetcher.mock.calls[0][1].body) as {

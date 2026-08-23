@@ -13,10 +13,10 @@ import type {
   ReviewerReport,
 } from "../domain/types.js";
 
-export const SAIL_MODEL = "openai/gpt-oss-120b";
+export const SAIL_MODEL = "deepseek/deepseek-v4-flash-0731";
 export const SAIL_API_URL = "https://api.sailresearch.com/v1/responses";
-export const SAIL_INPUT_USD_PER_MILLION = 0.06;
-export const SAIL_OUTPUT_USD_PER_MILLION = 0.4;
+export const SAIL_INPUT_USD_PER_MILLION = 0.09;
+export const SAIL_OUTPUT_USD_PER_MILLION = 0.18;
 
 const responseEnvelopeSchema = z.looseObject({
   id: z.string().min(1),

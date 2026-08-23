@@ -7,7 +7,7 @@ Gauntlet runs as a GitHub App. It does not use a personal access token and it do
 - A public GitHub repository.
 - Node.js 22 or newer.
 - pnpm 10.15.0 through Corepack.
-- A Sail API key with access to GPT-OSS 120B and Sailboxes.
+- A Sail API key with access to DeepSeek V4 Flash and Sailboxes.
 - A public HTTPS webhook endpoint. A temporary Smee channel is suitable for local development.
 
 ## Create the app
