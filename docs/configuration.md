@@ -23,7 +23,7 @@ The model slug is fixed to `deepseek/deepseek-v4-flash-0731`. Requests use Sail'
 - `reasoning.effort` set to `low`.
 - Strict JSON Schema output.
 - A 180-second request timeout.
-- Serial model calls and bounded retries for HTTP 429 responses.
+- Serial model calls and bounded exponential backoff for HTTP 429 responses at 15, 30, 60, 120, and 240 seconds.
 - A 6,000-token response ceiling with concise schema-only output instructions.
 
 Gauntlet does not silently change models. A provider rejection, timeout, malformed response, missing reviewer report, malformed final synthesis, or inconclusive challenge fails closed. The client reads only `output_text` content from the response envelope and validates the extracted JSON again with Zod. The final synthesis is one additional structured request after every specialist and challenge completes. It returns a headline, a 120-to-350-word overview, and up to six items each for changes, risks, and recommended actions.

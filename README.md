@@ -108,7 +108,7 @@ Point the GitHub App webhook to `https://<host>/api/github/webhooks` and set the
 For temporary local testing, run these commands in separate terminals. The first starts Probot on port 3002. The second forwards the Smee channel configured on the GitHub App.
 
 ```bash
-PORT=3002 pnpm start
+HOST=0.0.0.0 PORT=3002 pnpm start
 npx smee-client --url https://smee.io/<channel> --path /api/github/webhooks --port 3002
 ```
 

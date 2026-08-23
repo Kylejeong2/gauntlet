@@ -109,7 +109,9 @@ export class SailModelClient {
     this.#apiKey = options.apiKey;
     this.#fetcher = options.fetcher ?? fetch;
     this.#apiUrl = options.apiUrl ?? SAIL_API_URL;
-    this.#retryDelaysMs = options.retryDelaysMs ?? [15_000, 30_000, 60_000];
+    this.#retryDelaysMs = options.retryDelaysMs ?? [
+      15_000, 30_000, 60_000, 120_000, 240_000,
+    ];
     this.#audit =
       options.audit ??
       ((event) => {
