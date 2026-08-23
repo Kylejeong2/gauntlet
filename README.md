@@ -14,8 +14,6 @@
 
 Gauntlet reviews public pull requests with DeepSeek V4 Flash through Sail. It runs repository checks in an isolated Sailbox, gives each specialist its own voice, and asks a separate model call to disprove every proposed finding. A deterministic policy layer decides what reaches GitHub.
 
-The result reads like a careful team review, not a transcript of model guesses.
-
 ## What you get
 
 |                       | Gauntlet's contract                                                                         |
