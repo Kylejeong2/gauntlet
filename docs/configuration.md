@@ -4,22 +4,25 @@ Gauntlet has one GitHub provider, one model, one sandbox provider, and one local
 
 ## Environment variables
 
-| Variable         | Required | Purpose                                                              |
-| ---------------- | -------- | -------------------------------------------------------------------- |
-| `APP_ID`         | Yes      | Numeric GitHub App ID consumed by Probot.                            |
-| `PRIVATE_KEY`    | Yes      | GitHub App PEM private key consumed by Probot.                       |
-| `WEBHOOK_SECRET` | Yes      | HMAC secret used by Probot to authenticate webhook bodies.           |
-| `SAIL_API_KEY`   | Yes      | Host-only credential for Sail inference and Sailbox lifecycle calls. |
-| `DATABASE_PATH`  | No       | SQLite path. Defaults to `./data/gauntlet.db`.                       |
-| `LOG_LEVEL`      | No       | Probot log level. Defaults to Probot's normal setting.               |
+| Variable           | Required | Purpose                                                              |
+| ------------------ | -------- | -------------------------------------------------------------------- |
+| `APP_ID`           | Yes      | Numeric GitHub App ID consumed by Probot.                            |
+| `PRIVATE_KEY`      | Yes*     | GitHub App PEM private key consumed by Probot.                       |
+| `PRIVATE_KEY_PATH` | Yes*     | Absolute path to the GitHub App PEM; preferred for local hosting.    |
+| `WEBHOOK_SECRET`   | Yes      | HMAC secret used by Probot to authenticate webhook bodies.           |
+| `SAIL_API_KEY`     | Yes      | Host-only credential for Sail inference and Sailbox lifecycle calls. |
+| `DATABASE_PATH`    | No       | SQLite path. Defaults to `./data/gauntlet.db`.                       |
+| `LOG_LEVEL`        | No       | Probot log level. Defaults to Probot's normal setting.               |
 
-The process environment is the configuration boundary. Gauntlet does not forward it to a Sailbox. Every sandbox command receives an explicit empty environment overlay and the Sail SDK communicates with the box from the host.
+Exactly one of `PRIVATE_KEY` or `PRIVATE_KEY_PATH` is required. An ignored local `.env` overrides matching process values, which makes it the stable source of truth during local restarts. Hosted deployments should store the same fixed values in their secret manager. Gauntlet does not forward this environment to a Sailbox. Every sandbox command receives an explicit empty environment overlay and the Sail SDK communicates with the box from the host.
+
+`pnpm local:configure` creates `WEBHOOK_SECRET` once and refuses an accidental replacement. The only time an operator should change it is an intentional credential rotation coordinated with the GitHub App setting. Startup validates the GitHub variables and prints a non-secret SHA-256 fingerprint of the effective webhook secret.
 
 ## Inference contract
 
 The model slug is fixed to `deepseek/deepseek-v4-flash-0731`. Requests use Sail's OpenAI-compatible Responses endpoint at `https://api.sailresearch.com/v1/responses` with:
 
-- `metadata.completion_window` set to `asap`.
+- `metadata.completion_window` set to `flex`.
 - `reasoning.effort` set to `low`.
 - Strict JSON Schema output.
 - A 180-second request timeout.

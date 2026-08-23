@@ -107,12 +107,23 @@ Point the GitHub App webhook to `https://<host>/api/github/webhooks` and set the
 
 The app must subscribe to **Pull request** and **Issue comment** events. Once the service is reachable, opening or updating a pull request starts a review automatically. Add `@gauntlet review` as a new pull request comment when you want to request one explicitly.
 
-For temporary local testing, run these commands in separate terminals. The first starts Probot on port 3002. The second forwards the Smee channel configured on the GitHub App.
+For local testing, configure the GitHub values once. This command creates one persistent `WEBHOOK_SECRET` in the ignored `.env`, reuses it on every later invocation, and copies it to the macOS clipboard. Paste it into the GitHub App webhook secret field once.
 
 ```bash
-HOST=0.0.0.0 PORT=3002 pnpm start
+pnpm local:configure -- \
+  --app-id <github-app-id> \
+  --private-key-path </absolute/path/to/app.private-key.pem> \
+  --port 3002
+```
+
+Then run these commands in separate terminals:
+
+```bash
+pnpm local:start
 npx smee-client --url https://smee.io/<channel> --path /api/github/webhooks --port 3002
 ```
+
+Do not regenerate the webhook secret on restart. `local:configure` refuses to replace an existing `.env` secret with a different supplied value. If GitHub reports a signature mismatch, run `pnpm local:configure` with the same app ID and key path to copy the existing value again, then update GitHub once. The startup log prints a short SHA-256 fingerprint so operators can identify which persistent secret the process loaded without exposing it.
 
 Use a managed service with an attached volume or a small virtual machine. Do not use a host that sleeps between requests because the review worker drains its durable queue in the same process.
 

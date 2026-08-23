@@ -38,24 +38,34 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-Copy `.env.example` to `.env` for local development and replace every placeholder. The application never reads or logs the file directly. Probot supplies GitHub authentication from `APP_ID`, `PRIVATE_KEY`, and `WEBHOOK_SECRET`; Gauntlet reads only the Sail key and database path from the process environment.
+Copy `.env.example` to `.env` for local development and replace the Sail placeholder. Never commit the file. Configure the GitHub values once with:
+
+```bash
+pnpm local:configure -- \
+  --app-id <github-app-id> \
+  --private-key-path </absolute/path/to/app.private-key.pem> \
+  --port 3002
+```
+
+The command creates a cryptographically random webhook secret only when `.env` does not already contain one. It persists the App ID, absolute private-key path, host, port, and SQLite path alongside that secret and copies the existing secret to the macOS clipboard. Paste it into the GitHub App webhook secret field once. Re-running the command keeps the same secret; supplying a conflicting secret file fails instead of rotating it.
 
 ## Start locally
 
 Build and start Probot:
 
 ```bash
-pnpm build
-pnpm start
+pnpm local:start
 ```
 
-Probot listens on port 3000 by default. For a temporary Smee endpoint:
+The configured local port is 3002 by default. For a temporary Smee endpoint:
 
 ```bash
-npx smee-client --url https://smee.io/your-channel --path /api/github/webhooks --port 3000
+npx smee-client --url https://smee.io/your-channel --path /api/github/webhooks --port 3002
 ```
 
 Set the GitHub App webhook URL to the same Smee channel. Install the app on only the public repository used for testing. Opening or updating a non-draft pull request starts a review. Add `@gauntlet review` as a new pull request comment to request one explicitly. A request for a head SHA that Gauntlet already accepted is idempotent and does not spend again.
+
+At startup, Gauntlet validates that the App ID, private key or private-key path, and a webhook secret of at least 32 characters exist. It reports whether the secret came from `.env` or the process and logs only a short SHA-256 fingerprint. A signature mismatch means GitHub and the reported local fingerprint represent different secret values; it is not fixed by restarting or generating another value.
 
 ## Required environment
 

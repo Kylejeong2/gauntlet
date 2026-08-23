@@ -9,6 +9,8 @@
   "scripts": {
     "start": "node ./dist/server.js",
     "dev": "pnpm build && pnpm start",
+    "local:configure": "pnpm build && node ./dist/configure-local.js",
+    "local:start": "pnpm build && pnpm start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
