@@ -79,6 +79,41 @@ Replace every placeholder in `.env` before you start the app. Never commit that 
 
 Gauntlet fixes the model to `deepseek/deepseek-v4-flash-0731`. It never switches models after a provider failure. See [Configuration](docs/configuration.md) for every environment variable and cost assumption.
 
+## Self-host Gauntlet
+
+Run Gauntlet as one long-lived Node service. The host needs a public HTTPS endpoint and persistent storage for SQLite. Keep the service at one instance while it uses the local database.
+
+Set these environment variables on the host:
+
+```text
+APP_ID=<github-app-id>
+PRIVATE_KEY=<github-app-private-key>
+WEBHOOK_SECRET=<random-webhook-secret>
+SAIL_API_KEY=<sail-api-key>
+DATABASE_PATH=/data/gauntlet.db
+LOG_LEVEL=info
+```
+
+Attach persistent storage at `/data`, then build and start the service:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+pnpm start
+```
+
+Point the GitHub App webhook to `https://<host>/api/github/webhooks` and set the same `WEBHOOK_SECRET` in GitHub. The service listens on the `PORT` value supplied by the host.
+
+For temporary local testing, run these commands in separate terminals. The first starts Probot on port 3002. The second forwards the Smee channel configured on the GitHub App.
+
+```bash
+PORT=3002 pnpm start
+npx smee-client --url https://smee.io/<channel> --path /api/github/webhooks --port 3002
+```
+
+Use a managed service with an attached volume or a small virtual machine. Do not use a host that sleeps between requests because the review worker drains its durable queue in the same process.
+
 ## Security boundary
 
 Pull request code is hostile input. The GitHub App host never checks it out or executes it. The Sailbox receives no GitHub token, App key, webhook secret, Sail key, host environment, host volume, or Docker socket.
