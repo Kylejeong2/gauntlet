@@ -1,4 +1,4 @@
-# Gauntlet
+<h1 align="center">Gauntlet</h1>
 
 <p align="center">
   <img src="assets/gauntlet-app-logo-512.png" alt="Infinity Gauntlet photograph" width="180" />
