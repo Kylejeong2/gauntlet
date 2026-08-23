@@ -7,7 +7,7 @@ import {
 } from "../src/adapters/sailbox-tools.js";
 
 describe("Sail model contract", () => {
-  it("uses DeepSeek V4 Flash through Sail's synchronous flex contract and accounts for usage", async () => {
+  it("uses DeepSeek V4 Flash through Sail's synchronous asap contract and accounts for usage", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -62,7 +62,7 @@ describe("Sail model contract", () => {
     const request = JSON.parse(init.body) as Record<string, unknown>;
     expect(request).toMatchObject({
       model: "deepseek/deepseek-v4-flash-0731",
-      metadata: { completion_window: "flex" },
+      metadata: { completion_window: "asap" },
       reasoning: { effort: "low" },
       max_output_tokens: 6000,
     });
@@ -133,7 +133,7 @@ describe("Sail model contract", () => {
       metadata?: { completion_window?: string };
       text?: { format?: { name?: string } };
     };
-    expect(request.metadata?.completion_window).toBe("flex");
+    expect(request.metadata?.completion_window).toBe("asap");
     expect(request.text?.format?.name).toBe("review_summary");
   });
 
