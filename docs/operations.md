@@ -30,6 +30,8 @@ Sail 429 responses are retried with delays of 15, 30, and 60 seconds. Server fai
 
 `delivery_id` is unique. The tuple `(installation_id, repository_id, pull_number, head_sha)` is also unique. Replayed delivery IDs and separate deliveries for the same head are acknowledged without a second run. A new head SHA creates a new run.
 
+A human can add `@gauntlet review` as a new pull request comment. The `issue_comment` adapter accepts that exact mention on public pull requests, ignores ordinary issue comments and bot authors, resolves the current base and head through GitHub, and sends the target through the same durable acceptance path. Mentioning Gauntlet again on an already accepted head remains a no-op.
+
 Stable identities embedded as `<!-- gauntlet:identity -->` are read from existing review comments. The next head suppresses an equivalent finding instead of repeating it. Reviewer comments carry `<!-- gauntlet-reviewer:run-id:reviewer-id -->` markers so a retry skips specialist comments already posted.
 
 Run markers embedded as `<!-- gauntlet-run:run-id -->` reconcile publication after a crash. A recovered lease checks existing reviews before submission and reuses the matching GitHub review ID.

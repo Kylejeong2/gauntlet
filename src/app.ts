@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import type { Probot } from "probot";
 import {
   classifyPullRequest,
+  classifyReviewRequestComment,
   GitHubReviewClient,
   type PullRequestApi,
 } from "./adapters/github.js";
@@ -95,6 +96,61 @@ export default (app: Probot): void => {
       accepted.kind === "created"
         ? "review accepted"
         : "duplicate review delivery suppressed",
+    );
+    if (accepted.kind === "created") wakeWorker();
+  });
+
+  app.on("issue_comment.created", async (context) => {
+    const request = classifyReviewRequestComment(context.payload);
+    if (request.kind === "ineligible") {
+      context.log.info(
+        { reason: request.reason },
+        "review request comment ignored",
+      );
+      return;
+    }
+    const target = request.target;
+    const pull = await context.octokit.rest.pulls.get({
+      owner: target.owner,
+      repo: target.repository,
+      pull_number: target.pullNumber,
+    });
+    const eligibility = classifyPullRequest({
+      action: "opened",
+      installation: { id: target.installationId },
+      repository: {
+        id: target.repositoryId,
+        private: context.payload.repository.private,
+        name: target.repository,
+        owner: { login: target.owner },
+      },
+      pull_request: pull.data,
+    });
+    if (eligibility.kind === "ineligible") {
+      context.log.info(
+        { reason: eligibility.reason },
+        "review request comment ignored",
+      );
+      return;
+    }
+    const reviewTarget = eligibility.target;
+    const accepted = store.acceptRun({
+      deliveryId: deliveryId(context.id),
+      runId: runId(randomUUID()),
+      ...reviewTarget,
+      receivedAtMs: Date.now(),
+    });
+    context.log.info(
+      {
+        runId: accepted.runId,
+        owner: reviewTarget.owner,
+        repository: reviewTarget.repository,
+        pullNumber: reviewTarget.pullNumber,
+        disposition: accepted.kind,
+      },
+      accepted.kind === "created"
+        ? "review accepted from @gauntlet request"
+        : "duplicate @gauntlet review request suppressed",
     );
     if (accepted.kind === "created") wakeWorker();
   });

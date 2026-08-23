@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyReviewRequestComment,
   classifyPullRequest,
   parseChangedRightLines,
 } from "../src/adapters/github.js";
@@ -24,6 +25,51 @@ const payload = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("GitHub contracts", () => {
+  it("accepts only human @gauntlet requests on public pull requests", () => {
+    const commentPayload = {
+      action: "created",
+      installation: { id: 1 },
+      repository: {
+        id: 2,
+        private: false,
+        name: "gauntlet",
+        owner: { login: "Kylejeong2" },
+      },
+      issue: { number: 4, pull_request: { url: "https://api.github.test/4" } },
+      comment: { body: "@gauntlet review" },
+      sender: { login: "contributor", type: "User" },
+    };
+
+    expect(classifyReviewRequestComment(commentPayload)).toEqual({
+      kind: "eligible",
+      target: {
+        installationId: 1,
+        repositoryId: 2,
+        pullNumber: 4,
+        owner: "Kylejeong2",
+        repository: "gauntlet",
+      },
+    });
+    expect(
+      classifyReviewRequestComment({
+        ...commentPayload,
+        comment: { body: "please review" },
+      }),
+    ).toEqual({ kind: "ineligible", reason: "missing_review_trigger" });
+    expect(
+      classifyReviewRequestComment({
+        ...commentPayload,
+        issue: { number: 4 },
+      }),
+    ).toEqual({ kind: "ineligible", reason: "not_pull_request_comment" });
+    expect(
+      classifyReviewRequestComment({
+        ...commentPayload,
+        sender: { login: "automation[bot]", type: "Bot" },
+      }),
+    ).toEqual({ kind: "ineligible", reason: "bot_authored_comment" });
+  });
+
   it("extracts only added right-side lines from a unified patch", () => {
     expect(
       parseChangedRightLines(

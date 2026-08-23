@@ -45,6 +45,84 @@ const pullRequestEventSchema = z.looseObject({
   }),
 });
 
+const reviewRequestCommentSchema = z.looseObject({
+  action: z.literal("created"),
+  installation: z.looseObject({ id: z.number().int().positive() }),
+  repository: z.looseObject({
+    id: z.number().int().positive(),
+    private: z.boolean(),
+    name: z.string().trim().min(1),
+    owner: z.looseObject({ login: z.string().trim().min(1) }),
+  }),
+  issue: z.looseObject({
+    number: z.number().int().positive(),
+    pull_request: z.looseObject({}).optional(),
+  }),
+  comment: z.looseObject({ body: z.string() }),
+  sender: z.looseObject({
+    login: z.string().trim().min(1),
+    type: z.string().trim().min(1),
+  }),
+});
+
+export type ReviewRequestCommentIneligibleReason =
+  | "unsupported_action"
+  | "private_repository"
+  | "bot_authored_comment"
+  | "not_pull_request_comment"
+  | "missing_review_trigger"
+  | "malformed_payload";
+
+export type ReviewRequestCommentEligibility =
+  | Readonly<{
+      kind: "eligible";
+      target: Readonly<{
+        installationId: InstallationId;
+        repositoryId: RepositoryId;
+        pullNumber: PullNumber;
+        owner: string;
+        repository: string;
+      }>;
+    }>
+  | Readonly<{
+      kind: "ineligible";
+      reason: ReviewRequestCommentIneligibleReason;
+    }>;
+
+export const classifyReviewRequestComment = (
+  payload: unknown,
+): ReviewRequestCommentEligibility => {
+  const parsed = reviewRequestCommentSchema.safeParse(payload);
+  if (!parsed.success)
+    return { kind: "ineligible", reason: "malformed_payload" };
+  const event = parsed.data;
+  if (event.repository.private)
+    return { kind: "ineligible", reason: "private_repository" };
+  if (
+    event.sender.type.toLowerCase() === "bot" ||
+    event.sender.login.toLowerCase().endsWith("[bot]")
+  )
+    return { kind: "ineligible", reason: "bot_authored_comment" };
+  if (event.issue.pull_request === undefined)
+    return { kind: "ineligible", reason: "not_pull_request_comment" };
+  if (!/(?:^|\s)@gauntlet(?=$|\s|[.,!?;:])/i.test(event.comment.body))
+    return { kind: "ineligible", reason: "missing_review_trigger" };
+  try {
+    return {
+      kind: "eligible",
+      target: {
+        installationId: installationId(event.installation.id),
+        repositoryId: repositoryId(event.repository.id),
+        pullNumber: pullNumber(event.issue.number),
+        owner: event.repository.owner.login,
+        repository: event.repository.name,
+      },
+    };
+  } catch {
+    return { kind: "ineligible", reason: "malformed_payload" };
+  }
+};
+
 export type PullRequestIneligibleReason =
   | "unsupported_action"
   | "private_repository"

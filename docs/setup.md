@@ -21,11 +21,12 @@ Open GitHub **Settings > Developer settings > GitHub Apps > New GitHub App** and
 | Webhook URL                           | Your deployed `/api/github/webhooks` URL or temporary proxy URL |
 | Webhook secret                        | A new random value stored as `WEBHOOK_SECRET`                   |
 | Repository permissions: Contents      | Read-only                                                       |
+| Repository permissions: Issues        | Read-only                                                       |
 | Repository permissions: Pull requests | Read and write                                                  |
-| Subscribe to events                   | Pull request                                                    |
+| Subscribe to events                   | Pull request, Issue comment                                     |
 | Where can this app be installed?      | Only on this account for a private development app              |
 
-Gauntlet listens to `opened`, `reopened`, `ready_for_review`, and `synchronize`. Draft pull requests and private repositories are rejected before a Sail request or Sailbox creation.
+Gauntlet listens to pull request `opened`, `reopened`, `ready_for_review`, and `synchronize` events. A human can also request a review by adding a new `@gauntlet` comment to a pull request. Ordinary issue comments, comments without the trigger, and bot-authored comments are rejected before a Sail request or Sailbox creation. Draft pull requests and private repositories are also rejected.
 
 Generate a private key after creating the app. Store its PEM contents as `PRIVATE_KEY`. Record the numeric App ID as `APP_ID`.
 
@@ -54,7 +55,7 @@ Probot listens on port 3000 by default. For a temporary Smee endpoint:
 npx smee-client --url https://smee.io/your-channel --path /api/github/webhooks --port 3000
 ```
 
-Set the GitHub App webhook URL to the same Smee channel. Install the app on only the public repository used for testing. Opening or updating a non-draft pull request starts a review.
+Set the GitHub App webhook URL to the same Smee channel. Install the app on only the public repository used for testing. Opening or updating a non-draft pull request starts a review. Add `@gauntlet review` as a new pull request comment to request one explicitly. A request for a head SHA that Gauntlet already accepted is idempotent and does not spend again.
 
 ## Required environment
 

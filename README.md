@@ -105,6 +105,8 @@ pnpm start
 
 Point the GitHub App webhook to `https://<host>/api/github/webhooks` and set the same `WEBHOOK_SECRET` in GitHub. The service listens on the `PORT` value supplied by the host.
 
+The app must subscribe to **Pull request** and **Issue comment** events. Once the service is reachable, opening or updating a pull request starts a review automatically. Add `@gauntlet review` as a new pull request comment when you want to request one explicitly.
+
 For temporary local testing, run these commands in separate terminals. The first starts Probot on port 3002. The second forwards the Smee channel configured on the GitHub App.
 
 ```bash
