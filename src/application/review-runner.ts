@@ -9,6 +9,7 @@ import type {
   CandidateFinding,
   ChallengeVerdict,
   PublicationInput,
+  ReviewSummary,
   ReviewerReport,
 } from "../domain/types.js";
 import type { CommitSha, RunId } from "../domain/ids.js";
@@ -47,6 +48,7 @@ export type ReviewAuditEvent =
       outcome: ChallengeVerdict["kind"];
       cost: UsdMicros;
     }>
+  | Readonly<{ kind: "summary_completed"; cost: UsdMicros }>
   | Readonly<{ kind: "publication_reconciled"; reviewId: number }>
   | Readonly<{ kind: "publication_submitted"; reviewId: number }>
   | Readonly<{ kind: "sandbox_terminated"; sailboxId: string }>;
@@ -78,6 +80,13 @@ export type ReviewPorts = Readonly<{
         toolEvidence: readonly string[];
       }>,
     ) => Promise<Costed<{ verdict: ChallengeVerdict }>>;
+    summarize: (
+      input: Readonly<{
+        reports: readonly ReviewerReport[];
+        challenges: readonly ChallengeVerdict[];
+        coverageOmissions: readonly string[];
+      }>,
+    ) => Promise<Costed<{ summary: ReviewSummary }>>;
   }>;
   github: Readonly<{
     findExisting?: (
@@ -110,7 +119,7 @@ export const estimateWorstCaseRunCost = (reviewerCount: number): UsdMicros => {
   const maximumChallenges = reviewerCount * 3;
   return usdMicros(
     MAX_SAILBOX_USD_MICROS +
-      (reviewerRequests + maximumChallenges) * MAX_MODEL_REQUEST_USD_MICROS,
+      (reviewerRequests + maximumChallenges + 1) * MAX_MODEL_REQUEST_USD_MICROS,
   );
 };
 
@@ -187,6 +196,13 @@ export const runReview = async (
       });
     }
     const challenges = challengeResults.map((result) => result.verdict);
+    const summaryResult = await ports.model.summarize({
+      reports,
+      challenges,
+      coverageOmissions: input.coverageOmissions,
+    });
+    addCost(summaryResult.cost);
+    ports.audit?.({ kind: "summary_completed", cost: summaryResult.cost });
     const plan = reducePublication({
       runId: input.runId,
       headSha: input.headSha,
@@ -198,6 +214,7 @@ export const runReview = async (
       coverageOmissions: input.coverageOmissions,
       estimatedCost: cost,
       durationMs: Date.now() - startedAt,
+      reviewSummary: summaryResult.summary,
     });
     if (plan.kind !== "publish")
       throw new Error(`Publication refused: ${plan.reason}`);

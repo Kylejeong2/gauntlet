@@ -232,6 +232,7 @@ The planner reserves a conservative maximum for the entire mandatory run before 
 - Up to ten reviewers.
 - Four model turns and three tool calls per reviewer.
 - Up to three challenges per reviewer.
+- One final structured synthesis request after all reports and challenges complete.
 - GitHub publication and cleanup work that does not have a provider token charge.
 
 The GPT-OSS estimate ignores cached-input discounts. It uses the full input rate, the bounded input size, and the maximum output size. Provider usage settles a reservation when usage is present. Missing usage retains the conservative estimate.
@@ -250,7 +251,8 @@ The planner does not start a partial organization. If the full worst-case plan c
 6. Sort by severity, confidence, evidence quality, and finding ID.
 7. Keep the first five findings.
 8. Attribute each inline finding to its originating specialist.
-9. Render one COMMENT review per specialist, followed by one summary review with the one-decimal arithmetic mean of the selected reviewer scores, coverage omissions, cost, duration, and verified inline findings.
+9. Render one COMMENT review per specialist, followed by one expanded summary review with the LLM synthesis, one-decimal arithmetic mean of the selected reviewer scores, coverage omissions, cost, duration, and verified inline findings.
+10. Add a collapsed copyable `Prompt to fix` to every specialist comment, verified inline finding, and final summary. Prompt text is derived deterministically from validated model fields and has backticks neutralized before entering a Markdown code fence.
 
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
 
@@ -262,7 +264,7 @@ The GitHub adapter checks the current head, then creates one COMMENT review with
 | --- | --- |
 | `RunStore` | Accept runs, claim leases, persist snapshots, work, budgets, reports, challenges, Sailboxes, and publication receipts. |
 | `GitHubPort` | Fetch the immutable snapshot, mint installation clients, reconcile prior finding identities, and publish idempotent reviewer comments plus one summary review. |
-| `ModelPort` | Run serialized GPT-OSS reviewer and challenge requests with strict schemas and typed response parsing. |
+| `ModelPort` | Run serialized GPT-OSS reviewer, challenge, and final synthesis requests with strict schemas and typed response parsing. |
 | `SailboxPort` | Create, execute bounded argument-vector commands, inspect lifecycle, and terminate. |
 | `BudgetLedger` | Reserve, settle, and report microdollar costs under one transaction owner. |
 | `Clock` | Make leases, durations, and retry tests deterministic. |

@@ -33,13 +33,14 @@ const candidate: CandidateFinding = {
 
 describe("review orchestration", () => {
   it("admits the maximum reviewer and finding plan below the hard ceiling", () => {
-    expect(estimateWorstCaseRunCost(10)).toBe(usdMicros(130_000));
+    expect(estimateWorstCaseRunCost(10)).toBe(usdMicros(133_000));
     expect(() => estimateWorstCaseRunCost(11)).toThrow("between one and ten");
   });
 
   it("runs every selected specialist, challenges every finding, and publishes once", async () => {
     const reviewed: string[] = [];
     const challenged: string[] = [];
+    let summarized = false;
     const publications: unknown[] = [];
     let terminated = false;
     let activeModelRequests = 0;
@@ -84,6 +85,21 @@ describe("review orchestration", () => {
           };
           return Promise.resolve({ verdict, cost: usdMicros(50) });
         },
+        summarize: ({ reports, challenges }) => {
+          summarized = true;
+          expect(reports).toHaveLength(CORE_REVIEWERS.length);
+          expect(challenges).toHaveLength(1);
+          return Promise.resolve({
+            summary: {
+              headline: "One verified blocker",
+              overview: "The review found one reachable shell injection.",
+              keyChanges: ["Changed command execution"],
+              keyRisks: ["Arbitrary command execution"],
+              recommendedActions: ["Use an argument-vector API"],
+            },
+            cost: usdMicros(75),
+          });
+        },
       },
       github: {
         publish: (plan) => {
@@ -116,7 +132,8 @@ describe("review orchestration", () => {
     expect(publications).toHaveLength(1);
     expect(maximumActiveModelRequests).toBe(1);
     expect(result.reviewId).toBe(42);
-    expect(result.cost).toBe(usdMicros(850));
+    expect(result.cost).toBe(usdMicros(925));
+    expect(summarized).toBe(true);
     expect(terminated).toBe(true);
     expect(auditEvents).toContain("reviewer_completed");
     expect(auditEvents).toContain("challenge_completed");
@@ -137,6 +154,7 @@ describe("review orchestration", () => {
       model: {
         review: () => Promise.reject(new Error("provider unavailable")),
         challenge: () => Promise.reject(new Error("unreachable")),
+        summarize: () => Promise.reject(new Error("unreachable")),
       },
       github: {
         publish: () => Promise.reject(new Error("must not publish")),

@@ -62,6 +62,14 @@ const averageReadiness = (reports: readonly ReviewerReport[]): string => {
   return (total / reports.length).toFixed(1);
 };
 
+const promptText = (value: string): string => value.replaceAll("`", "'");
+
+const promptDropdown = (prompt: string): string =>
+  `<details>\n<summary>Prompt to fix</summary>\n\n\`\`\`text\n${promptText(prompt)}\n\`\`\`\n</details>`;
+
+const list = (items: readonly string[], empty: string): string =>
+  items.length === 0 ? empty : items.map((item) => `- ${item}`).join("\n");
+
 export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const reportCounts = new Map<string, number>();
   for (const report of input.reports) {
@@ -149,7 +157,7 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const selected = [...unique.values()].sort(strongerFirst).slice(0, 5);
   const comments = selected.map((candidate) => ({
     finding: candidate,
-    body: `**${reviewerTitle(candidate.reviewer)} reviewer · ${candidate.severity.toUpperCase()}: ${candidate.title}**\n\nTrigger: ${candidate.trigger}\n\nEvidence: ${candidate.evidence}\n\nAction: ${candidate.proposedAction}\n\n<!-- gauntlet:${candidate.stableIdentity} -->`,
+    body: `**${reviewerTitle(candidate.reviewer)} reviewer · ${candidate.severity.toUpperCase()}: ${candidate.title}**\n\nTrigger: ${candidate.trigger}\n\nEvidence: ${candidate.evidence}\n\nAction: ${candidate.proposedAction}\n\n${promptDropdown(`Fix the verified ${candidate.severity} finding from the ${reviewerTitle(candidate.reviewer)} reviewer in ${candidate.location.path} at changed line ${String(candidate.location.line)}.\n\nProblem: ${candidate.title}\nTrigger: ${candidate.trigger}\nEvidence: ${candidate.evidence}\nRequired action: ${candidate.proposedAction}\n\nMake the smallest safe change, preserve unrelated behavior, add or update a regression test that proves the defect is fixed, and run the relevant project checks. Summarize the code changed and the verification performed.`)}\n\n<!-- gauntlet:${candidate.stableIdentity} -->`,
   }));
   const omissions =
     input.coverageOmissions.length === 0
@@ -157,9 +165,10 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
       : input.coverageOmissions.join("; ");
   const reviewerComments = selectedReports.map((report) => ({
     reviewer: report.reviewer,
-    body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
+    body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(report.readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
   }));
-  const body = `## Gauntlet summary\n\nOverall readiness: ${averageReadiness(selectedReports)}/5\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}\n\n<!-- gauntlet-run:${input.runId} -->`;
+  const summary = input.reviewSummary;
+  const body = `## Gauntlet summary\n\n### ${summary.headline}\n\n${summary.overview}\n\n## What changed\n\n${list(summary.keyChanges, "No material changes identified.")}\n\n## Key risks\n\n${list(summary.keyRisks, "No verified material risks identified.")}\n\n## Recommended next steps\n\n${list(summary.recommendedActions, "No follow-up required beyond normal review and testing.")}\n\nOverall readiness: ${averageReadiness(selectedReports)}/5\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}\n\n${promptDropdown(`Fix the issues identified by the Gauntlet review for this pull request.\n\nSummary: ${summary.headline}\n${summary.overview}\n\nKey risks:\n${list(summary.keyRisks, "None identified.")}\n\nRecommended actions:\n${list(summary.recommendedActions, "Run the normal project verification.")}\n\nUse the verified inline findings and specialist comments as the source of truth. Make the smallest coherent changes, preserve unrelated behavior, add or update regression tests, run all relevant checks, and report the files changed plus verification results.`)}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",
     runId: input.runId,

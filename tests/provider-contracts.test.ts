@@ -97,6 +97,44 @@ describe("Sail model contract", () => {
     ).rejects.toThrow("Invalid Sail reviewer response");
   });
 
+  it("produces a structured PR-level synthesis with usage accounting", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "response-summary",
+          status: "completed",
+          output_text: JSON.stringify({
+            headline: "One verified blocker remains",
+            overview:
+              "The specialists agree that the changed command execution exposes a reachable shell injection. The compatibility and documentation reviews found no separate blockers, but the security defect must be fixed before merge.",
+            keyChanges: ["Changed process execution"],
+            keyRisks: ["Arbitrary command execution"],
+            recommendedActions: ["Use an argument-vector process API"],
+          }),
+          usage: { input_tokens: 500, output_tokens: 250 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const client = new SailModelClient({ apiKey: "test-key", fetcher });
+
+    const result = await client.summarize({
+      reports: [],
+      challenges: [],
+      coverageOmissions: [],
+    });
+
+    expect(result.summary.headline).toBe("One verified blocker remains");
+    expect(result.summary.keyRisks).toEqual(["Arbitrary command execution"]);
+    expect(result.cost).toBe(usdMicros(130));
+    if (typeof fetcher.mock.calls[0]?.[1]?.body !== "string")
+      throw new Error("Expected JSON request body");
+    const request = JSON.parse(fetcher.mock.calls[0][1].body) as {
+      text?: { format?: { name?: string } };
+    };
+    expect(request.text?.format?.name).toBe("review_summary");
+  });
+
   it("retries a transient rate limit without changing models", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

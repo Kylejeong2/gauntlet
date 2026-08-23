@@ -40,6 +40,13 @@ const baseInput = {
   coverageOmissions: [],
   estimatedCost: usdMicros(20_000),
   durationMs: 2_000,
+  reviewSummary: {
+    headline: "Fixture review complete",
+    overview: "The specialist review has been synthesized.",
+    keyChanges: ["Changed fixture"],
+    keyRisks: ["Review the verified findings"],
+    recommendedActions: ["Address confirmed defects"],
+  },
 };
 
 describe("ProductSpec fixture evaluations", () => {

@@ -36,6 +36,14 @@ export type ChallengeVerdict =
   | Readonly<{ kind: "inconclusive"; findingId: FindingId; reason: string }>
   | Readonly<{ kind: "failed"; findingId: FindingId; reason: string }>;
 
+export type ReviewSummary = Readonly<{
+  headline: string;
+  overview: string;
+  keyChanges: readonly string[];
+  keyRisks: readonly string[];
+  recommendedActions: readonly string[];
+}>;
+
 export type RunState =
   | Readonly<{ kind: "accepted" }>
   | Readonly<{ kind: "snapshotting" }>
@@ -66,4 +74,5 @@ export type PublicationInput = Readonly<{
   coverageOmissions: readonly string[];
   estimatedCost: UsdMicros;
   durationMs: number;
+  reviewSummary: ReviewSummary;
 }>;

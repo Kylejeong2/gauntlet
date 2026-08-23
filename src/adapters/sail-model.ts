@@ -3,11 +3,13 @@ import { estimateModelRequest } from "../domain/budget.js";
 import { findingId, usdMicros, type ReviewerId } from "../domain/ids.js";
 import {
   challengeVerdictSchema,
+  reviewSummarySchema,
   reviewerReportSchema,
 } from "../domain/schemas.js";
 import type {
   CandidateFinding,
   ChallengeVerdict,
+  ReviewSummary,
   ReviewerReport,
 } from "../domain/types.js";
 
@@ -56,23 +58,29 @@ export type ChallengeRequest = Readonly<{
   toolEvidence: readonly string[];
 }>;
 
+export type SummaryRequest = Readonly<{
+  reports: readonly ReviewerReport[];
+  challenges: readonly ChallengeVerdict[];
+  coverageOmissions: readonly string[];
+}>;
+
 export type SailModelAuditEvent =
   | Readonly<{
       kind: "model_request_started";
-      operation: "review" | "challenge";
+      operation: "review" | "challenge" | "summary";
       correlationId: string;
       model: string;
     }>
   | Readonly<{
       kind: "model_request_retry";
-      operation: "review" | "challenge";
+      operation: "review" | "challenge" | "summary";
       correlationId: string;
       status: number;
       attempt: number;
     }>
   | Readonly<{
       kind: "model_request_completed";
-      operation: "review" | "challenge";
+      operation: "review" | "challenge" | "summary";
       correlationId: string;
       responseId: string;
       inputTokens: number;
@@ -190,12 +198,52 @@ export class SailModelClient {
     return { verdict, cost: result.cost, responseId: result.responseId };
   }
 
+  public async summarize(request: SummaryRequest): Promise<
+    Readonly<{
+      summary: ReviewSummary;
+      cost: ReturnType<typeof usdMicros>;
+      responseId: string;
+    }>
+  > {
+    const result = await this.#request(
+      [
+        "You are Gauntlet's final pull-request review editor.",
+        "Synthesize the specialist reports and independent challenge verdicts into a useful PR-level briefing.",
+        "Explain the change, the material risks, and concrete next steps so a developer can understand the review without reading every specialist comment.",
+        "Treat confirmed challenge verdicts as verified, rejected verdicts as disproved, and inconclusive or failed verdicts as unresolved rather than facts.",
+        "Do not invent repository changes, test results, dependencies, or findings.",
+        "Keep the overview between 120 and 350 words. Use at most six concise items in each list.",
+        "Return only the JSON object required by the response schema.",
+        `Specialist reports:\n${JSON.stringify(request.reports)}`,
+        `Challenge verdicts:\n${JSON.stringify(request.challenges)}`,
+        request.coverageOmissions.length === 0
+          ? "Coverage omissions: none."
+          : `Coverage omissions:\n${request.coverageOmissions.join("\n")}`,
+      ].join("\n\n"),
+      "review_summary",
+      reviewSummaryJsonSchema,
+      { operation: "summary", correlationId: "final-summary" },
+    );
+    const parsed = reviewSummarySchema.safeParse(parseJsonObject(result.value));
+    if (!parsed.success)
+      throw new Error(
+        `Invalid Sail summary response: ${parsed.error.issues
+          .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+          .join("; ")}`,
+      );
+    return {
+      summary: parsed.data,
+      cost: result.cost,
+      responseId: result.responseId,
+    };
+  }
+
   async #request(
     prompt: string,
     schemaName: string,
     schema: Record<string, unknown>,
     correlation: Readonly<{
-      operation: "review" | "challenge";
+      operation: "review" | "challenge" | "summary";
       correlationId: string;
     }>,
   ): Promise<ModelResult<string>> {
@@ -388,5 +436,30 @@ const challengeJsonSchema = {
       enum: ["confirmed", "rejected", "inconclusive"],
     },
     reason: { type: "string", minLength: 1 },
+  },
+};
+
+const summaryListJsonSchema = {
+  type: "array",
+  maxItems: 6,
+  items: { type: "string", minLength: 1, maxLength: 500 },
+};
+
+const reviewSummaryJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "headline",
+    "overview",
+    "keyChanges",
+    "keyRisks",
+    "recommendedActions",
+  ],
+  properties: {
+    headline: { type: "string", minLength: 1, maxLength: 160 },
+    overview: { type: "string", minLength: 1, maxLength: 4000 },
+    keyChanges: summaryListJsonSchema,
+    keyRisks: summaryListJsonSchema,
+    recommendedActions: summaryListJsonSchema,
   },
 };

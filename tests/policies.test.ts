@@ -69,6 +69,14 @@ const report = (candidate: CandidateFinding): ReviewerReport => ({
   findings: [candidate],
 });
 
+const reviewSummary = {
+  headline: "Review complete",
+  overview: "The specialist review has been synthesized.",
+  keyChanges: ["Changed implementation"],
+  keyRisks: ["Review the verified findings"],
+  recommendedActions: ["Address confirmed defects"],
+};
+
 describe("AC-7, AC-8, and AC-10 publication reduction", () => {
   it("requires confirmed challenges and exact reviewed-head changed lines", () => {
     const a = finding();
@@ -107,6 +115,14 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       coverageOmissions: [],
       estimatedCost: usdMicros(10_000),
       durationMs: 207_648,
+      reviewSummary: {
+        headline: "Unsafe shell execution blocks this change",
+        overview:
+          "The pull request introduces a reachable command injection in the changed process boundary. The independent verification supports blocking the change until shell interpolation is removed.",
+        keyChanges: ["Routes a name through a shell command"],
+        keyRisks: ["An attacker can execute arbitrary commands"],
+        recommendedActions: ["Replace exec with an argument-vector API"],
+      },
     });
     expect(result.kind).toBe("publish");
     if (result.kind === "publish") {
@@ -115,6 +131,19 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       ]);
       expect(result.body).toContain("Duration: 207.6s");
       expect(result.body).not.toContain("207648ms");
+      expect(result.body).toContain(
+        "Unsafe shell execution blocks this change",
+      );
+      expect(result.body).toContain("## What changed");
+      expect(result.body).toContain("## Key risks");
+      expect(result.body).toContain("## Recommended next steps");
+      expect(result.body).toContain("<summary>Prompt to fix</summary>");
+      expect(result.reviewerComments[0]?.body).toContain(
+        "<summary>Prompt to fix</summary>",
+      );
+      expect(result.comments[0]?.body).toContain(
+        "<summary>Prompt to fix</summary>",
+      );
     }
   });
 
@@ -161,6 +190,7 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       coverageOmissions: [],
       estimatedCost: usdMicros(10_000),
       durationMs: 1000,
+      reviewSummary,
     });
     expect(result.kind).toBe("publish");
     if (result.kind === "publish") {
@@ -214,6 +244,7 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       coverageOmissions: [],
       estimatedCost: usdMicros(10_000),
       durationMs: 1000,
+      reviewSummary,
     });
     expect(result.kind).toBe("publish");
     if (result.kind === "publish") {
@@ -245,6 +276,7 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
         coverageOmissions: [],
         estimatedCost: usdMicros(0),
         durationMs: 0,
+        reviewSummary,
       }),
     ).toEqual({
       kind: "skip",
@@ -277,6 +309,7 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       coverageOmissions: [],
       estimatedCost: usdMicros(0),
       durationMs: 0,
+      reviewSummary,
     });
     expect(result.kind).toBe("publish");
     if (result.kind === "publish") expect(result.comments).toEqual([]);

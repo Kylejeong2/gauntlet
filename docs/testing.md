@@ -28,7 +28,7 @@ pnpm check
 
 The domain tests cover the eight mandatory and two optional reviewer definitions, the ten-reviewer ceiling, 1-to-5 readiness scores, strict candidate-finding fields, and the three-finding ceiling. These checks map to AC-4, AC-5, AC-6, and AC-14.
 
-The pure-policy tests cover conservative integer-microdollar estimates, the $0.25 reservation ceiling, challenge failure closure, exact changed-line validation, cross-specialist corroboration, same-line collapse, stable-identity suppression, deterministic deduplication and ranking, the five-comment ceiling, separate reviewer-comment rendering, sensitive-value redaction, and deterministic scheduling. These checks map to AC-7, AC-8, AC-10, AC-13, and AC-15.
+The pure-policy tests cover conservative integer-microdollar estimates, the $0.25 reservation ceiling, challenge failure closure, exact changed-line validation, cross-specialist corroboration, same-line collapse, stable-identity suppression, deterministic deduplication and ranking, the five-comment ceiling, separate reviewer-comment rendering, expanded summary rendering, copyable fix prompts on every comment type, sensitive-value redaction, and deterministic scheduling. These checks map to AC-7, AC-8, AC-10, AC-13, and AC-15.
 
 The SQLite integration tests execute direct migrations against a real in-memory SQLite database. They cover duplicate deliveries, rejected-delivery reasons, same-target delivery idempotency, new-head runs, immutable snapshot put and reload, snapshot conflicts, lease exclusion, expired-lease recovery, stale-owner rejection, idempotent budget reservation, and overflow denial. These checks map to AC-1, AC-2, AC-3, AC-10, AC-13, AC-14, and the applicable SQLite layer of AC-16.
 
@@ -36,11 +36,11 @@ The SQLite integration tests execute direct migrations against a real in-memory 
 
 The GitHub suites cover complete event classification, public-only, draft, bot, and unsupported-action filtering, unified-patch right-side line extraction, constant-time webhook signature verification, exact-SHA comparison, merge-base capture, bounded pagination, prior stable-marker extraction, exact-head COMMENT review rendering, separate specialist comments, and final summary publication.
 
-The Sail suites assert the GPT-OSS 120B model slug, `metadata.completion_window: "asap"`, low reasoning effort, strict output parsing, reasoning-item exclusion, integer-microdollar token accounting, bounded 429 retry, malformed-response failure, and reviewer identity preservation.
+The Sail suites assert the GPT-OSS 120B model slug, `metadata.completion_window: "asap"`, low reasoning effort, strict reviewer and final-synthesis output parsing, reasoning-item exclusion, integer-microdollar token accounting, bounded 429 retry, malformed-response failure, and reviewer identity preservation.
 
 The Sailbox suites assert size `s` with the live provider minimums, public HTTPS clone, exact merge-base and head fetch, detached checkout, merge-base-scoped evidence, empty command environments, argument arrays, timeouts, bounded output, allowlisted project commands, setup-failure cleanup, and normal termination.
 
-The orchestration suites prove all selected reviewers run serially, every candidate gets a distinct challenge call, reviewer or provider failure publishes nothing, sandbox cleanup runs in a `finally` path, the full ten-reviewer plan reserves $0.13, and successful output creates one publication plan.
+The orchestration suites prove all selected reviewers run serially, every candidate gets a distinct challenge call, one synthesis runs after those results exist, reviewer or provider failure publishes nothing, sandbox cleanup runs in a `finally` path, the full ten-reviewer plan reserves $0.133, and successful output creates one publication plan.
 
 These tests extend coverage through AC-1 to AC-11, AC-13 to AC-15, and the implemented portions of AC-16.
 

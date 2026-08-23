@@ -41,6 +41,8 @@ Gauntlet publishes one GitHub COMMENT review with:
 - Any explicit coverage omissions.
 - Estimated cost and duration.
 - At most five verified inline findings, each attributed to its originating reviewer.
+- A structured LLM synthesis of what changed, key risks, and recommended next steps.
+- A collapsed, copyable `Prompt to fix` on every specialist, summary, and inline finding comment.
 
 Gauntlet does not publish positive inline comments, style preferences, duplicates, off-diff findings, or claims that failed or skipped verification.
 
@@ -57,7 +59,8 @@ The implemented publication reducer enforces these rules without provider or Git
 7. Each reviewer returns one score and at most three candidate findings.
 8. A separate GPT-OSS request tries to disprove every finding.
 9. Pure policy rejects unconfirmed, duplicate, stale, or unanchorable findings.
-10. Gauntlet publishes one top-level comment per specialist, then one compact summary review with verified inline findings, and terminates the Sailbox.
+10. One final bounded GPT-OSS call synthesizes the completed organization into a PR-level briefing.
+11. Gauntlet publishes one top-level comment per specialist, then the expanded summary review with verified inline findings and copyable fix prompts, and terminates the Sailbox.
 
 Read [the architecture](docs/architecture.md) for the state model, tool limits, database tables, budget rules, and recovery behavior.
 
