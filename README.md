@@ -1,142 +1,124 @@
-<h1 align="center">Gauntlet</h1>
+<div align="center">
+  <img src="assets/gauntlet-app-logo-512.png" alt="Gold cartoon gauntlet on a purple background" width="160" />
+  <h1>Gauntlet</h1>
+  <p><strong>A review team for every pull request.</strong></p>
+  <p>Specialist agents inspect the code. Independent agents challenge every finding. Developers see only the feedback that survives.</p>
+  <p>
+    <a href="https://github.com/Kylejeong2/gauntlet/actions/workflows/ci.yml"><img src="https://github.com/Kylejeong2/gauntlet/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/Kylejeong2/gauntlet" alt="MIT license" /></a>
+    <img src="https://img.shields.io/badge/Node.js-22%2B-339933" alt="Node.js 22 or newer" />
+    <img src="https://img.shields.io/badge/model-DeepSeek%20V4%20Flash-5b21b6" alt="DeepSeek V4 Flash" />
+  </p>
+  <p><a href="https://github.com/apps/gauntlet-review-dev">GitHub App</a> · <a href="docs/setup.md">Setup</a> · <a href="docs/architecture.md">Architecture</a> · <a href="specs/gauntlet.product-spec.md">Product spec</a></p>
+</div>
 
-<p align="center">
-  <img src="assets/gauntlet-app-logo-512.png" alt="Gold cartoon gauntlet on a purple background" width="180" />
-</p>
+Gauntlet reviews public pull requests with DeepSeek V4 Flash through Sail. It runs repository checks in an isolated Sailbox, gives each specialist its own voice, and asks a separate model call to disprove every proposed finding. A deterministic policy layer decides what reaches GitHub.
 
-Gauntlet is an open-source GitHub App that reviews public pull requests through several specialist viewpoints. It uses DeepSeek V4 Flash through Sail and executes repository checks in ephemeral Sailboxes.
+The result reads like a careful team review, not a transcript of model guesses.
 
-The product goal is strict. Every visible finding must survive a separate challenge. Each specialist gets a readable top-level comment, while verified code defects stay inline and speculative findings stay hidden.
+## What you get
 
-## Current status
+|                       | Gauntlet's contract                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Review team           | Eight fixed specialists, with up to two extra specialists when the change needs them        |
+| Independent challenge | Every candidate finding gets a separate attempt to disprove it                              |
+| Pull request summary  | One overall score, a plain-language briefing, key risks, and recommended actions            |
+| Specialist comments   | One readable top-level comment per reviewer, with its score and areas examined              |
+| Inline findings       | At most five confirmed defects, attached to changed lines and attributed to their reviewers |
+| Fix handoff           | Every comment includes a collapsed, copyable `Prompt to fix`                                |
+| Cost                  | A hard estimated ceiling of $0.25 per pull request                                          |
+| Execution             | Public repository code runs only in a credential-free Sailbox                               |
 
-Gauntlet has a working implementation against [ProductSpec revision 1](specs/gauntlet.product-spec.md). The deterministic gate covers domain, SQLite, GitHub payload, exact-SHA snapshots, Sail requests, Sailbox lifecycle, orchestration, challenges, redacted logging, and publication policy contracts.
+Gauntlet suppresses positive inline comments, style preferences, duplicates, stale findings, off-diff claims, and findings that fail verification.
 
-Live verification on 2026-08-22 completed the installed GitHub App flow on two public fixture pull requests. The command-injection run published eight separate specialist comments and one verified inline finding for $0.013657; the documentation-only control published eight specialist comments and zero inline findings for $0.012065. Both credential-free Sailboxes terminated, and replaying the first PR at the same head created no duplicate review. Those historical runs used GPT-OSS 120B. The current fixed model is DeepSeek V4 Flash, whose Sail request contract was reverified on 2026-08-23. Gauntlet never silently switches models.
+## The review team
 
-## Reviewers
+| Reviewer            | What it examines                                                      |
+| ------------------- | --------------------------------------------------------------------- |
+| Security            | Trust boundaries, injection, authorization, secrets, and exposure     |
+| Performance         | Latency, memory, I/O, and algorithmic growth                          |
+| API compatibility   | Public APIs, wire formats, schemas, and persisted contracts           |
+| Adversarial testing | Inputs and sequences most likely to break the change                  |
+| Documentation       | Accuracy, missing guidance, and migration requirements                |
+| New-user simulation | Setup, discoverability, first-run behavior, and error messages        |
+| Dependency history  | Version changes, known regressions, and reintroduced risks            |
+| Edge cases          | Boundaries, lifecycle state, ordering, concurrency, and platform gaps |
 
-Every eligible pull request receives these eight viewpoints:
+Gauntlet can add test-quality and concurrency reviewers. A run uses no more than ten reviewers. Each reviewer assigns a readiness score from 1 to 5, where 5 means ready to merge from that viewpoint and 1 means a critical problem blocks a safe merge.
 
-- Security.
-- Performance.
-- API compatibility.
-- Adversarial testing.
-- Documentation.
-- New-user simulation.
-- Dependency history.
-- Edge cases.
+## How a review moves
 
-Gauntlet can add test-quality and concurrency reviewers. A run never has more than ten reviewers.
-
-Each reviewer returns a readiness score from 1 through 5. A score of 5 means ready to merge from that viewpoint. A score of 1 means a critical problem blocks a safe merge.
-
-## Publication contract
-
-Gauntlet publishes one GitHub COMMENT review with:
-
-- One score and rationale per selected reviewer.
-- An overall readiness score equal to the mean of the selected reviewer scores.
-- The areas and files examined.
-- Any explicit coverage omissions.
-- Estimated cost and duration.
-- At most five verified inline findings, each attributed to its originating reviewer.
-- A structured LLM synthesis of what changed, key risks, and recommended next steps.
-- A collapsed, copyable `Prompt to fix` on every specialist, summary, and inline finding comment.
-
-Gauntlet does not publish positive inline comments, style preferences, duplicates, off-diff findings, or claims that failed or skipped verification.
-
-The implemented publication reducer enforces these rules without provider or GitHub SDK types. It requires one valid report per selected reviewer, keeps only explicitly confirmed findings, requires cross-specialist same-line corroboration except for high-confidence critical findings, validates right-side lines against the reviewed snapshot, suppresses stable identities from prior heads, collapses same-line duplicates, ranks deterministically, and returns at most five inline comments.
-
-## How a review works
-
-1. Probot verifies the signature, and the handler durably records the delivery decision.
-2. A leased worker compares the exact base and head SHAs, then stores and reloads the merge base, patches, right-side changed lines, and coverage omissions.
-3. The planner reserves the full worst-case run under $0.25.
-4. Gauntlet creates one credential-free Sailbox, checks out the exact public head SHA, and scopes every diff command to the persisted merge-base SHA.
-5. Repository setup and standard checks run with bounded time and output.
-6. Up to ten DeepSeek V4 Flash reviewers inspect the snapshot and bounded reviewer-specific Sailbox evidence.
-7. Each reviewer returns one score and at most three candidate findings.
-8. A separate DeepSeek V4 Flash request tries to disprove every finding.
-9. Pure policy rejects unconfirmed, duplicate, stale, or unanchorable findings.
-10. One final bounded DeepSeek V4 Flash call synthesizes the completed organization into a PR-level briefing.
-11. Gauntlet publishes one top-level comment per specialist, then the expanded summary review with verified inline findings and copyable fix prompts, and terminates the Sailbox.
-
-Read [the architecture](docs/architecture.md) for the state model, tool limits, database tables, budget rules, and recovery behavior.
-
-## Security boundary
-
-Pull request code is hostile input. The GitHub App host never checks out or executes it. Sailboxes receive no GitHub key, installation token, webhook secret, Sail key, host environment, host volume, or Docker socket.
-
-Reviewers cannot run an unrestricted shell. The first implementation uses a fixed evidence plan with pnpm installation, tests, diff checks, and dependency diffs. Every operation uses an argument vector, timeout, output limit, and cost reservation.
-
-Private repositories are outside the first release. Gauntlet rejects them before inference or code execution.
-
-Read [the security model](docs/security.md) for the full threat model, credential boundary, and operating controls.
-
-## Cost limit
-
-Every pull request has a hard estimated cost ceiling of $0.25. The ledger reserves conservative maximum cost before creating a Sailbox. It prices DeepSeek V4 Flash input without assuming cache discounts and reserves the configured maximum Sailbox resource use.
-
-The app reports provider token usage and estimated Sailbox cost separately. It does not present a local estimate as settled billing.
-
-## Repository layout
-
-The module map is:
-
-```text
-src/
-  adapters/        GitHub, Sail Responses, and Sailbox boundaries.
-  application/     Review orchestration and budget admission.
-  domain/          IDs, schemas, reviewers, budgets, scheduling, and publication policy.
-  storage/         SQLite migrations, idempotency, leases, and reservations.
-tests/             Unit, SQLite integration, provider contract, and orchestration tests.
-docs/              Architecture, setup, security, operation, testing, and research.
-specs/             Product intent and acceptance criteria.
+```mermaid
+flowchart LR
+    PR["Pull request webhook"] --> SNAP["Exact-SHA snapshot"]
+    SNAP --> BOX["Isolated Sailbox checks"]
+    SNAP --> TEAM["Specialist reviewers"]
+    BOX --> TEAM
+    TEAM --> CHALLENGE["Independent challenges"]
+    CHALLENGE --> POLICY["Deterministic publication policy"]
+    POLICY --> REVIEW["GitHub review"]
 ```
 
-## Documentation
+The webhook handler records each eligible delivery before it returns. A leased worker then stores and reloads an immutable snapshot of the exact base and head commits. Paid work starts only after the complete worst-case plan fits within the run budget.
 
-- [ProductSpec revision 1](specs/gauntlet.product-spec.md) is the product contract.
-- [Architecture](docs/architecture.md) explains the runtime and data model.
-- [Architecture comparison rubric](docs/architecture/arena-rubric.md) records how competing designs were judged.
-- [Decision 0001](docs/decisions/0001-durable-run-model.md) records the chosen durability model.
-- [Decision 0002](docs/decisions/0002-exact-pull-request-snapshots.md) records the exact-SHA snapshot boundary.
-- [Prior art](docs/research/prior-art.md) traces the inspected PR-AF, PR-Agent, CodeRabbit, Sail, and Sailbox sources.
-- [GitHub App setup](docs/setup.md) lists permissions, events, local webhook forwarding, and startup.
-- [Configuration](docs/configuration.md) defines environment, model, Sailbox, and budget contracts.
-- [Reviewer reference](docs/reviewers.md) defines every score, viewpoint, finding, challenge, and ranking rule.
-- [Security model](docs/security.md) documents hostile-code isolation, credentials, validation, and limitations.
-- [Operations](docs/operations.md) covers run sequence, failures, duplicates, and incident handling.
-- [Testing](docs/testing.md) lists the local gates and the acceptance criteria covered by the current suites.
-- [Acceptance status](docs/acceptance-status.md) maps each ProductSpec criterion to deterministic and live evidence.
+DeepSeek reviewers inspect the snapshot and bounded Sailbox evidence. Separate DeepSeek requests challenge their findings. Gauntlet rejects unconfirmed, duplicate, stale, and unanchorable claims before it publishes the specialist comments, the PR summary, and up to five inline findings.
 
-## Development contract
+Read [the architecture](docs/architecture.md) for the state model, database tables, recovery rules, and provider boundaries.
 
-The implementation uses Node 22 or newer and TypeScript in strict mode. Tests are written before production behavior. Every external payload is parsed at its adapter boundary. The domain has no framework or SDK imports.
+## Run Gauntlet
 
-Install dependencies and run the complete local gate:
+You need Node.js 22 or newer, pnpm 10.15.0 through Corepack, a GitHub App, a public test repository, and a Sail API key with access to DeepSeek V4 Flash and Sailboxes.
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
+cp .env.example .env
 pnpm check
+pnpm dev
 ```
 
-The individual commands are `pnpm format`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. `pnpm check` uses the non-mutating `format:check` variant. The current test command does not spend Sail credit or contact GitHub. Live tests remain opt-in because they spend Sail credit and write a review to the public fixture repository.
+Replace every placeholder in `.env` before you start the app. Never commit that file. The [GitHub App setup guide](docs/setup.md) lists the required permissions, webhook events, and local forwarding steps.
 
-Continue with the [GitHub App setup guide](docs/setup.md) when the local gate passes.
+Gauntlet fixes the model to `deepseek/deepseek-v4-flash-0731`. It never switches models after a provider failure. See [Configuration](docs/configuration.md) for every environment variable and cost assumption.
 
-## Prior work
+## Security boundary
 
-Gauntlet's design draws on public source code without copying an implementation:
+Pull request code is hostile input. The GitHub App host never checks it out or executes it. The Sailbox receives no GitHub token, App key, webhook secret, Sail key, host environment, host volume, or Docker socket.
 
-- [PR-AF](https://github.com/Agent-Field/pr-af) demonstrates parallel specialist review, evidence checks, adversarial challenges, cost reporting, and batched publication.
-- [PR-Agent](https://github.com/The-PR-Agent/pr-agent) demonstrates hardened GitHub App delivery, merge-base diff context, stable comment identities, and extensive provider tests.
-- [The preserved CodeRabbit action](https://github.com/dapperlabs/ai-pr-reviewer) demonstrates incremental reviewed-commit tracking and low-noise publication.
+Every repository command uses an argument array, a fixed working directory, an empty environment overlay, a timeout, and an output limit. Gauntlet rejects private repositories before inference or code execution.
 
-Pinned commits and file-level evidence are in [the prior-art report](docs/research/prior-art.md).
+Read [the security model](docs/security.md) for the threat model and operating controls.
+
+## Verification
+
+`pnpm check` runs formatting checks, ESLint, strict TypeScript checks, the deterministic test suite, and the production build. It does not contact GitHub or spend Sail credit. Live tests remain opt-in because they publish reviews and use paid services.
+
+The repository keeps detailed evidence out of this front page:
+
+| Document                                       | Use it for                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| [Testing](docs/testing.md)                     | Local commands, test coverage, and live test records         |
+| [Acceptance status](docs/acceptance-status.md) | ProductSpec criteria and their current evidence              |
+| [Operations](docs/operations.md)               | Run states, retries, duplicate prevention, and incidents     |
+| [Reviewer reference](docs/reviewers.md)        | Scores, findings, challenges, ranking, and publication rules |
+| [Prior art](docs/research/prior-art.md)        | Source-level research into earlier PR review systems         |
+
+<details>
+<summary>Repository layout</summary>
+
+```text
+src/
+  adapters/        GitHub, Sail Responses, and Sailbox boundaries
+  application/     Review orchestration and budget admission
+  domain/          Schemas, reviewers, budgets, scheduling, and publication policy
+  storage/         SQLite migrations, idempotency, leases, and reservations
+tests/             Unit, SQLite integration, provider contract, and orchestration tests
+docs/              Architecture, setup, security, operations, testing, and research
+specs/             Product intent and acceptance criteria
+```
+
+</details>
 
 ## License
 
-Gauntlet is available under the MIT License.
+Gauntlet is available under the [MIT License](LICENSE).
