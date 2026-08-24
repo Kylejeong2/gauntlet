@@ -163,12 +163,23 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     input.coverageOmissions.length === 0
       ? "None"
       : input.coverageOmissions.join("; ");
-  const reviewerComments = selectedReports.map((report) => ({
-    reviewer: report.reviewer,
-    body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(report.readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
-  }));
+  const reviewerComments = selectedReports.map((report) => {
+    const fixPrompt =
+      report.readiness < 5
+        ? `\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(report.readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}`
+        : "";
+    return {
+      reviewer: report.reviewer,
+      body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}${fixPrompt}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
+    };
+  });
   const summary = input.reviewSummary;
-  const body = `## Gauntlet summary\n\n### ${summary.headline}\n\n${summary.overview}\n\n## What changed\n\n${list(summary.keyChanges, "No material changes identified.")}\n\n## Key risks\n\n${list(summary.keyRisks, "No verified material risks identified.")}\n\n## Recommended next steps\n\n${list(summary.recommendedActions, "No follow-up required beyond normal review and testing.")}\n\nOverall readiness: ${averageReadiness(selectedReports)}/5\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}\n\n${promptDropdown(`Fix the issues identified by the Gauntlet review for this pull request.\n\nSummary: ${summary.headline}\n${summary.overview}\n\nKey risks:\n${list(summary.keyRisks, "None identified.")}\n\nRecommended actions:\n${list(summary.recommendedActions, "Run the normal project verification.")}\n\nUse the verified inline findings and specialist comments as the source of truth. Make the smallest coherent changes, preserve unrelated behavior, add or update regression tests, run all relevant checks, and report the files changed plus verification results.`)}\n\n<!-- gauntlet-run:${input.runId} -->`;
+  const overallReadiness = averageReadiness(selectedReports);
+  const summaryFixPrompt =
+    overallReadiness === "5.0"
+      ? ""
+      : `\n\n${promptDropdown(`Fix the issues identified by the Gauntlet review for this pull request.\n\nSummary: ${summary.headline}\n${summary.overview}\n\nKey risks:\n${list(summary.keyRisks, "None identified.")}\n\nRecommended actions:\n${list(summary.recommendedActions, "Run the normal project verification.")}\n\nUse the verified inline findings and specialist comments as the source of truth. Make the smallest coherent changes, preserve unrelated behavior, add or update regression tests, run all relevant checks, and report the files changed plus verification results.`)}`;
+  const body = `## Gauntlet summary\n\n### ${summary.headline}\n\n${summary.overview}\n\n## What changed\n\n${list(summary.keyChanges, "No material changes identified.")}\n\n## Key risks\n\n${list(summary.keyRisks, "No verified material risks identified.")}\n\n## Recommended next steps\n\n${list(summary.recommendedActions, "No follow-up required beyond normal review and testing.")}\n\nOverall readiness: ${overallReadiness}/5\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}${summaryFixPrompt}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",
     runId: input.runId,

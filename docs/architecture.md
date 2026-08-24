@@ -252,7 +252,7 @@ The planner does not start a partial organization. If the full worst-case plan c
 7. Keep the first five findings.
 8. Attribute each inline finding to its originating specialist.
 9. Render one COMMENT review per specialist, followed by one expanded summary review with the LLM synthesis, one-decimal arithmetic mean of the selected reviewer scores, coverage omissions, cost, duration, and verified inline findings.
-10. Add a collapsed copyable `Prompt to fix` to every specialist comment, verified inline finding, and final summary. Prompt text is derived deterministically from validated model fields and has backticks neutralized before entering a Markdown code fence.
+10. Add a collapsed copyable `Prompt to fix` to specialist comments scored below 5/5, every verified inline finding, and summaries scored below 5/5. A 5/5 specialist comment or summary has no fix prompt because the score communicates that no required action remains. Prompt text is derived deterministically from validated model fields and has backticks neutralized before entering a Markdown code fence.
 
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
 

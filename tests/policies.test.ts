@@ -175,7 +175,11 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       reports: [
         { ...report(security), readiness: 1 },
         { ...report(adversarial), readiness: 4 },
-        { ...report(speculative), readiness: 5 },
+        {
+          ...report(speculative),
+          readiness: 5,
+          rationale: "No documentation action is required.",
+        },
       ],
       challenges: candidates.map((candidate) => ({
         kind: "confirmed" as const,
@@ -198,6 +202,15 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       expect(result.reviewerComments[0]?.body).toContain(
         "Security reviewer: 1/5",
       );
+      expect(result.reviewerComments[0]?.body).toContain(
+        "<summary>Prompt to fix</summary>",
+      );
+      expect(result.reviewerComments[1]?.body).toContain(
+        "<summary>Prompt to fix</summary>",
+      );
+      expect(result.reviewerComments[2]?.body).not.toContain(
+        "<summary>Prompt to fix</summary>",
+      );
       expect(result.body).toContain("Overall readiness: 3.3/5");
       expect(result.comments).toHaveLength(1);
       expect(result.comments[0]?.body).toContain(
@@ -207,6 +220,44 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
         path: "src/index.ts",
         line: 12,
       });
+    }
+  });
+
+  it("omits fix prompts when a specialist and the overall review score 5/5", () => {
+    const result = reducePublication({
+      runId: runId("run-ready"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [reviewerId("documentation")],
+      reports: [
+        {
+          reviewer: reviewerId("documentation"),
+          readiness: 5,
+          rationale: "The documentation is complete and accurate.",
+          examinedAreas: ["documentation"],
+          findings: [],
+        },
+      ],
+      challenges: [],
+      changedLines: [{ path: "README.md", lines: [1] }],
+      priorStableIdentities: [],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(1_000),
+      durationMs: 1000,
+      reviewSummary: {
+        headline: "Ready to merge",
+        overview: "No actionable concerns remain.",
+        keyChanges: ["Documentation update"],
+        keyRisks: [],
+        recommendedActions: [],
+      },
+    });
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish") {
+      expect(result.reviewerComments[0]?.body).not.toContain(
+        "<summary>Prompt to fix</summary>",
+      );
+      expect(result.body).toContain("Overall readiness: 5.0/5");
+      expect(result.body).not.toContain("<summary>Prompt to fix</summary>");
     }
   });
 

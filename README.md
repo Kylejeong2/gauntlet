@@ -23,7 +23,7 @@ Gauntlet reviews public pull requests with DeepSeek V4 Flash through Sail. It ru
 | Pull request summary  | One overall score, a plain-language briefing, key risks, and recommended actions            |
 | Specialist comments   | One readable top-level comment per reviewer, with its score and areas examined              |
 | Inline findings       | At most five confirmed defects, attached to changed lines and attributed to their reviewers |
-| Fix handoff           | Every comment includes a collapsed, copyable `Prompt to fix`                                |
+| Fix handoff           | Actionable reviews and verified findings include a copyable `Prompt to fix`                 |
 | Cost                  | A hard estimated ceiling of $0.25 per pull request                                          |
 | Execution             | Public repository code runs only in a credential-free Sailbox                               |
 
