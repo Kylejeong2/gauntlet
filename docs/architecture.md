@@ -6,13 +6,13 @@ Status: accepted design for ProductSpec revision 1. Implementation and live veri
 
 The implementation provides the SDK-independent domain and SQLite foundation described here: branded boundary constructors, discriminated run states, the ten-entry reviewer registry, strict reviewer and finding schemas, the integer-microdollar budget policy, the pure challenge-gated publication reducer, structured-value redaction, `deriveNextWork`, direct migrations, and durable acceptance, lease, and budget-reservation operations.
 
-Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
+Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, an idempotent PR-description summary, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
 
 ## What Gauntlet does
 
 Gauntlet receives a public pull request webhook and reviews one immutable head commit. Eight core specialists inspect every eligible pull request. Each specialist publishes a separate readable GitHub review comment with its readiness score, rationale, and examined areas. Gauntlet can add test-quality and concurrency specialists when the diff calls for them. Every specialist returns a readiness score from 1 through 5 and at most three candidate findings.
 
-A candidate finding is not a GitHub comment. A new DeepSeek V4 Flash request tries to disprove it. Gauntlet publishes only confirmed findings that point to changed lines in the exact reviewed head. Multi-specialist runs require same-line corroboration from two reviewers, except for critical findings with at least 0.9 confidence. Same-line duplicates collapse to the strongest evidence, and the final summary review contains at most five inline comments.
+A candidate finding is not a GitHub comment. A new DeepSeek V4 Flash request tries to disprove it. Gauntlet publishes only confirmed findings that point to changed lines in the exact reviewed head. Multi-specialist runs require same-line corroboration from two reviewers, except for critical findings with at least 0.9 confidence. Same-line duplicates collapse to the strongest evidence, and the final summary review contains at most five inline comments. The final review is deliberately brief, and a hidden-marker block adds or replaces one Gauntlet summary line in the PR description without changing the author's text.
 
 ## System map
 
@@ -251,8 +251,9 @@ The planner does not start a partial organization. If the full worst-case plan c
 6. Sort by severity, confidence, evidence quality, and finding ID.
 7. Keep the first five findings.
 8. Attribute each inline finding to its originating specialist.
-9. Render one COMMENT review per specialist, followed by one expanded summary review with the LLM synthesis, one-decimal arithmetic mean of the selected reviewer scores, coverage omissions, cost, duration, and verified inline findings.
-10. Add a collapsed copyable `Prompt to fix` to specialist comments scored below 5/5, every verified inline finding, and summaries scored below 5/5. A 5/5 specialist comment or summary has no fix prompt because the score communicates that no required action remains. Prompt text is derived deterministically from validated model fields and has backticks neutralized before entering a Markdown code fence.
+9. Render one COMMENT review per specialist, followed by a compact final review containing a short synthesis, one-decimal arithmetic mean, one top risk, one next action, coverage omissions, cost, duration, and verified inline findings.
+10. Add a collapsed copyable `Prompt to fix` to specialist comments scored below 5/5 and every verified inline finding. The final summary never contains a fix prompt.
+11. Add or replace one hidden-marker Gauntlet note in the pull request description. Preserve all author-written content and collapse the generated headline to one line.
 
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
 
@@ -263,7 +264,7 @@ The GitHub adapter checks the current head, then creates one COMMENT review with
 | Port | Responsibility |
 | --- | --- |
 | `RunStore` | Accept runs, claim leases, persist snapshots, work, budgets, reports, challenges, Sailboxes, and publication receipts. |
-| `GitHubPort` | Fetch the immutable snapshot, mint installation clients, reconcile prior finding identities, and publish idempotent reviewer comments plus one summary review. |
+| `GitHubPort` | Fetch the immutable snapshot, mint installation clients, reconcile prior finding identities, update the marked PR-description summary, and publish idempotent reviewer comments plus one summary review. |
 | `ModelPort` | Run serialized DeepSeek V4 Flash reviewer, challenge, and final synthesis requests with strict schemas and typed response parsing. |
 | `SailboxPort` | Create, execute bounded argument-vector commands, inspect lifecycle, and terminate. |
 | `BudgetLedger` | Reserve, settle, and report microdollar costs under one transaction owner. |

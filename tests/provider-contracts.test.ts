@@ -107,9 +107,8 @@ describe("Sail model contract", () => {
             headline: "One verified blocker remains",
             overview:
               "The specialists agree that the changed command execution exposes a reachable shell injection. The compatibility and documentation reviews found no separate blockers, but the security defect must be fixed before merge.",
-            keyChanges: ["Changed process execution"],
-            keyRisks: ["Arbitrary command execution"],
-            recommendedActions: ["Use an argument-vector process API"],
+            topRisk: "Arbitrary command execution.",
+            nextAction: "Use an argument-vector process API.",
           }),
           usage: { input_tokens: 500, output_tokens: 250 },
         }),
@@ -125,7 +124,7 @@ describe("Sail model contract", () => {
     });
 
     expect(result.summary.headline).toBe("One verified blocker remains");
-    expect(result.summary.keyRisks).toEqual(["Arbitrary command execution"]);
+    expect(result.summary.topRisk).toBe("Arbitrary command execution.");
     expect(result.cost).toBe(usdMicros(90));
     if (typeof fetcher.mock.calls[0]?.[1]?.body !== "string")
       throw new Error("Expected JSON request body");

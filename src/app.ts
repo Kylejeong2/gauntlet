@@ -276,12 +276,17 @@ const makePullRequestApi = (octokit: InstallationOctokit): PullRequestApi => {
       return {
         data: {
           head: { sha: response.data.head.sha },
+          body: response.data.body,
           repository: {
             id: response.data.base.repo.id,
             private: response.data.base.repo.private,
           },
         },
       };
+    },
+    updatePull: async (input) => {
+      await pulls.update(input);
+      return { data: {} };
     },
     compareCommits: async (input) => {
       const response = await repos.compareCommitsWithBasehead(input);

@@ -230,6 +230,7 @@ type PullReview = Readonly<{ id: number; body?: string | null }>;
 
 type PullDetails = Readonly<{
   head: Readonly<{ sha: string }>;
+  body: string | null;
   repository: Readonly<{ id: number; private: boolean }>;
 }>;
 
@@ -247,6 +248,14 @@ export type PullRequestApi = Readonly<{
       pull_number: number;
     }>,
   ) => Promise<Readonly<{ data: PullDetails }>>;
+  updatePull: (
+    input: Readonly<{
+      owner: string;
+      repo: string;
+      pull_number: number;
+      body: string;
+    }>,
+  ) => Promise<Readonly<{ data: Readonly<Record<string, never>> }>>;
   compareCommits: (
     input: Readonly<{
       owner: string;
@@ -295,6 +304,22 @@ type PullRequestTarget = Readonly<{
   repository: string;
   pullNumber: number;
 }>;
+
+const pullRequestSummaryStart = "<!-- gauntlet-pr-summary:start -->";
+const pullRequestSummaryEnd = "<!-- gauntlet-pr-summary:end -->";
+const pullRequestSummaryPattern =
+  /<!-- gauntlet-pr-summary:start -->[\s\S]*?<!-- gauntlet-pr-summary:end -->/;
+
+export const upsertPullRequestSummary = (
+  body: string | null,
+  summary: string,
+): string => {
+  const block = `${pullRequestSummaryStart}\n> [!NOTE]\n> **Gauntlet:** ${summary.replaceAll(/\s+/g, " ").trim()}\n${pullRequestSummaryEnd}`;
+  const current = body?.trimEnd() ?? "";
+  if (pullRequestSummaryPattern.test(current))
+    return current.replace(pullRequestSummaryPattern, block);
+  return current.length === 0 ? block : `${current}\n\n${block}`;
+};
 
 export class GitHubReviewClient {
   readonly #api: PullRequestApi;
@@ -386,6 +411,12 @@ export class GitHubReviewClient {
       throw new Error("Pull request repository is not public");
     if (commitSha(pull.data.head.sha) !== plan.headSha)
       throw new Error("Pull request head changed before publication");
+    const pullRequestBody = upsertPullRequestSummary(
+      pull.data.body,
+      plan.pullRequestSummary,
+    );
+    if (pullRequestBody !== pull.data.body)
+      await this.#api.updatePull({ ...this.#params(), body: pullRequestBody });
     const reviews = await paginate((page) =>
       this.#api.listReviews({ ...this.#params(), per_page: 100, page }),
     );

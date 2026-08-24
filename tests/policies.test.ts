@@ -72,9 +72,8 @@ const report = (candidate: CandidateFinding): ReviewerReport => ({
 const reviewSummary = {
   headline: "Review complete",
   overview: "The specialist review has been synthesized.",
-  keyChanges: ["Changed implementation"],
-  keyRisks: ["Review the verified findings"],
-  recommendedActions: ["Address confirmed defects"],
+  topRisk: "Review the verified findings.",
+  nextAction: "Address confirmed defects.",
 };
 
 describe("AC-7, AC-8, and AC-10 publication reduction", () => {
@@ -119,9 +118,8 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
         headline: "Unsafe shell execution blocks this change",
         overview:
           "The pull request introduces a reachable command injection in the changed process boundary. The independent verification supports blocking the change until shell interpolation is removed.",
-        keyChanges: ["Routes a name through a shell command"],
-        keyRisks: ["An attacker can execute arbitrary commands"],
-        recommendedActions: ["Replace exec with an argument-vector API"],
+        topRisk: "An attacker can execute arbitrary commands.",
+        nextAction: "Replace exec with an argument-vector API.",
       },
     });
     expect(result.kind).toBe("publish");
@@ -129,15 +127,19 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       expect(result.comments.map((comment) => comment.finding.id)).toEqual([
         a.id,
       ]);
-      expect(result.body).toContain("Duration: 207.6s");
+      expect(result.body).toContain("**Duration:** 207.6s");
       expect(result.body).not.toContain("207648ms");
       expect(result.body).toContain(
         "Unsafe shell execution blocks this change",
       );
-      expect(result.body).toContain("## What changed");
-      expect(result.body).toContain("## Key risks");
-      expect(result.body).toContain("## Recommended next steps");
-      expect(result.body).toContain("<summary>Prompt to fix</summary>");
+      expect(result.body).toContain("**Readiness:** 2.0/5");
+      expect(result.body).not.toContain("## What changed");
+      expect(result.body).not.toContain("## Key risks");
+      expect(result.body).not.toContain("## Recommended next steps");
+      expect(result.body).not.toContain("<summary>Prompt to fix</summary>");
+      expect(result.pullRequestSummary).toBe(
+        "Unsafe shell execution blocks this change",
+      );
       expect(result.reviewerComments[0]?.body).toContain(
         "<summary>Prompt to fix</summary>",
       );
@@ -211,7 +213,7 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       expect(result.reviewerComments[2]?.body).not.toContain(
         "<summary>Prompt to fix</summary>",
       );
-      expect(result.body).toContain("Overall readiness: 3.3/5");
+      expect(result.body).toContain("**Readiness:** 3.3/5");
       expect(result.comments).toHaveLength(1);
       expect(result.comments[0]?.body).toContain(
         "**Adversarial Testing reviewer · HIGH: Shell injection through name**",
@@ -246,9 +248,8 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       reviewSummary: {
         headline: "Ready to merge",
         overview: "No actionable concerns remain.",
-        keyChanges: ["Documentation update"],
-        keyRisks: [],
-        recommendedActions: [],
+        topRisk: "No verified material risk.",
+        nextAction: "No action required.",
       },
     });
     expect(result.kind).toBe("publish");
@@ -256,7 +257,7 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       expect(result.reviewerComments[0]?.body).not.toContain(
         "<summary>Prompt to fix</summary>",
       );
-      expect(result.body).toContain("Overall readiness: 5.0/5");
+      expect(result.body).toContain("**Readiness:** 5.0/5");
       expect(result.body).not.toContain("<summary>Prompt to fix</summary>");
     }
   });

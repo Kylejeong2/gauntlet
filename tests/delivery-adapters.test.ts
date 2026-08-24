@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   GitHubReviewClient,
+  upsertPullRequestSummary,
   verifyWebhookSignature,
   type PullRequestApi,
 } from "../src/adapters/github.js";
@@ -19,6 +20,23 @@ describe("webhook authentication", () => {
 });
 
 describe("GitHub review delivery", () => {
+  it("appends and replaces one marked PR-description summary", () => {
+    const first = upsertPullRequestSummary(
+      "## Summary\n\nAuthor-written description.",
+      "One verified blocker remains.",
+    );
+    expect(first).toContain("Author-written description.");
+    expect(first).toContain("> **Gauntlet:** One verified blocker remains.");
+    const updated = upsertPullRequestSummary(
+      first,
+      "No verified blockers remain.",
+    );
+    expect(updated).toContain("Author-written description.");
+    expect(updated).toContain("> **Gauntlet:** No verified blockers remain.");
+    expect(updated).not.toContain("One verified blocker remains.");
+    expect(updated.match(/gauntlet-pr-summary:start/g)).toHaveLength(1);
+  });
+
   it("builds an immutable snapshot, separates reviewer comments, and submits one finding review", async () => {
     const createReview = vi
       .fn<PullRequestApi["createReview"]>()
@@ -46,14 +64,19 @@ describe("GitHub review delivery", () => {
           ],
         },
       });
+    const updatePull = vi
+      .fn<PullRequestApi["updatePull"]>()
+      .mockResolvedValue({ data: {} });
     const api: PullRequestApi = {
       getPull: () =>
         Promise.resolve({
           data: {
             head: { sha: "b".repeat(40) },
+            body: "## Summary\n\nOriginal author text.",
             repository: { id: 2, private: false },
           },
         }),
+      updatePull,
       compareCommits,
       listReviewComments: () =>
         Promise.resolve({
@@ -97,6 +120,7 @@ describe("GitHub review delivery", () => {
       runId: runId("run-publish"),
       headSha: commitSha("b".repeat(40)),
       body: "## Gauntlet summary",
+      pullRequestSummary: "One verified blocker remains.",
       reviewerComments: [
         {
           reviewer: reviewerId("security"),
@@ -126,6 +150,16 @@ describe("GitHub review delivery", () => {
       ],
     });
     expect(publication).toEqual({ reviewId: 99 });
+    expect(updatePull).toHaveBeenCalledTimes(1);
+    const updateInput = updatePull.mock.calls[0]?.[0];
+    expect(updateInput).toMatchObject({
+      owner: "Kylejeong2",
+      repo: "gauntlet",
+      pull_number: 1,
+    });
+    expect(updateInput?.body).toContain(
+      "> **Gauntlet:** One verified blocker remains.",
+    );
     expect(createReview).toHaveBeenCalledTimes(3);
     expect(createReview).toHaveBeenNthCalledWith(1, {
       owner: "Kylejeong2",
@@ -166,6 +200,7 @@ describe("GitHub review delivery", () => {
   it("reconciles a previously submitted run after a crash", async () => {
     const api: PullRequestApi = {
       getPull: () => Promise.reject(new Error("must not capture")),
+      updatePull: () => Promise.reject(new Error("must not update")),
       compareCommits: () => Promise.reject(new Error("must not capture")),
       listReviewComments: () => Promise.resolve({ data: [] }),
       listReviews: () =>

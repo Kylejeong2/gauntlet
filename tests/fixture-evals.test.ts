@@ -43,9 +43,8 @@ const baseInput = {
   reviewSummary: {
     headline: "Fixture review complete",
     overview: "The specialist review has been synthesized.",
-    keyChanges: ["Changed fixture"],
-    keyRisks: ["Review the verified findings"],
-    recommendedActions: ["Address confirmed defects"],
+    topRisk: "Review the verified findings.",
+    nextAction: "Address confirmed defects.",
   },
 };
 

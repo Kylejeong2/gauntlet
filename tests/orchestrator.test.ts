@@ -93,9 +93,8 @@ describe("review orchestration", () => {
             summary: {
               headline: "One verified blocker",
               overview: "The review found one reachable shell injection.",
-              keyChanges: ["Changed command execution"],
-              keyRisks: ["Arbitrary command execution"],
-              recommendedActions: ["Use an argument-vector API"],
+              topRisk: "Arbitrary command execution.",
+              nextAction: "Use an argument-vector API.",
             },
             cost: usdMicros(75),
           });

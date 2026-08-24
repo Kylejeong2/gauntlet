@@ -88,14 +88,11 @@ export const challengeVerdictSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-const summaryItemsSchema = z.array(z.string().trim().min(1).max(500)).max(6);
-
 export const reviewSummarySchema = z
   .object({
     headline: z.string().trim().min(1).max(160),
-    overview: z.string().trim().min(1).max(4_000),
-    keyChanges: summaryItemsSchema,
-    keyRisks: summaryItemsSchema,
-    recommendedActions: summaryItemsSchema,
+    overview: z.string().trim().min(1).max(600),
+    topRisk: z.string().trim().min(1).max(300),
+    nextAction: z.string().trim().min(1).max(300),
   })
   .strict();

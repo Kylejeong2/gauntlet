@@ -2,10 +2,10 @@
 spec_format_version: "0.1"
 title: "Gauntlet public pull request reviewer"
 artifact_type: "prd"
-spec_revision: 1
+spec_revision: 2
 author: "Kyle Jeong"
 created_at: "2026-08-22T08:29:19Z"
-updated_at: "2026-08-22T08:29:19Z"
+updated_at: "2026-08-24T03:54:26Z"
 linked_github_repo: "Kylejeong2/gauntlet"
 applies_to:
   - component: "github-app"
@@ -24,7 +24,7 @@ If Gauntlet gives each public pull request to a small group of specialist review
 
 ## Product Summary
 
-Gauntlet is an open-source GitHub App for public repositories. It reviews pull requests with up to ten named specialist viewpoints using DeepSeek V4 Flash through Sail. Reviewers can inspect and execute the exact pull request head inside one ephemeral Sailbox. Every reviewer returns a merge-readiness score from 1 to 5 and zero or more structured findings. A separate model call tries to disprove each finding. Gauntlet publishes one compact GitHub review with the selected reviewer scorecard and no more than five verified inline comments. The entire run, including inference and Sailbox execution, has a hard estimated cost ceiling of $0.25.
+Gauntlet is an open-source GitHub App for public repositories. It reviews pull requests with up to ten named specialist viewpoints using DeepSeek V4 Flash through Sail. Reviewers can inspect and execute the exact pull request head inside one ephemeral Sailbox. Every reviewer returns a merge-readiness score from 1 to 5 and zero or more structured findings. A separate model call tries to disprove each finding. Gauntlet publishes each specialist separately, a compact final review with no more than five verified inline comments, and one marked summary line in the PR description. The entire run, including inference and Sailbox execution, has a hard estimated cost ceiling of $0.25.
 
 ## Scope
 
@@ -73,7 +73,7 @@ cut:
 - id: AC-8
   criterion: Gauntlet semantically deduplicates confirmed findings, validates every location against the exact reviewed head diff, and publishes no more than five inline comments.
 - id: AC-9
-  criterion: Gauntlet publishes one COMMENT review containing the selected reviewer scorecard, coverage, cost, duration, and verified findings, and it publishes no positive inline comments or separate reviewer comments.
+  criterion: Gauntlet publishes one COMMENT review per selected specialist, a compact final COMMENT review containing the overall score, top risk, next action, coverage, cost, duration, and verified findings, and one idempotent summary line in the PR description while preserving author-written content.
 - id: AC-10
   criterion: A synchronize webhook reviews only the new head SHA, reconciles earlier Gauntlet findings through stable hidden identities, and does not repeat an unchanged finding.
 - id: AC-11

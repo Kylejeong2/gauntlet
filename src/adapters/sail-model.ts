@@ -211,10 +211,10 @@ export class SailModelClient {
       [
         "You are Gauntlet's final pull-request review editor.",
         "Synthesize the specialist reports and independent challenge verdicts into a useful PR-level briefing.",
-        "Explain the change, the material risks, and concrete next steps so a developer can understand the review without reading every specialist comment.",
+        "Write one short headline for the pull request description, a compact overview, the single most important risk, and the single next action.",
         "Treat confirmed challenge verdicts as verified, rejected verdicts as disproved, and inconclusive or failed verdicts as unresolved rather than facts.",
         "Do not invent repository changes, test results, dependencies, or findings.",
-        "Keep the overview between 120 and 350 words. Use at most six concise items in each list.",
+        "Keep the overview between 30 and 70 words. Keep every field concise and avoid repeating the same fact.",
         "Return only the JSON object required by the response schema.",
         `Specialist reports:\n${JSON.stringify(request.reports)}`,
         `Challenge verdicts:\n${JSON.stringify(request.challenges)}`,
@@ -441,27 +441,14 @@ const challengeJsonSchema = {
   },
 };
 
-const summaryListJsonSchema = {
-  type: "array",
-  maxItems: 6,
-  items: { type: "string", minLength: 1, maxLength: 500 },
-};
-
 const reviewSummaryJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "headline",
-    "overview",
-    "keyChanges",
-    "keyRisks",
-    "recommendedActions",
-  ],
+  required: ["headline", "overview", "topRisk", "nextAction"],
   properties: {
     headline: { type: "string", minLength: 1, maxLength: 160 },
-    overview: { type: "string", minLength: 1, maxLength: 4000 },
-    keyChanges: summaryListJsonSchema,
-    keyRisks: summaryListJsonSchema,
-    recommendedActions: summaryListJsonSchema,
+    overview: { type: "string", minLength: 1, maxLength: 600 },
+    topRisk: { type: "string", minLength: 1, maxLength: 300 },
+    nextAction: { type: "string", minLength: 1, maxLength: 300 },
   },
 };

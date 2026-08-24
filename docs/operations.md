@@ -15,9 +15,9 @@ Stop the process with a normal termination signal. Do not delete a live SQLite d
 5. Reviewer evidence commands run inside the box.
 6. Reviewer calls run serially.
 7. Candidate challenges run serially.
-8. A final structured synthesis call turns the reports and challenge outcomes into a PR-level briefing.
-9. Pure policy creates one publication plan with copyable fix prompts for specialist reviews and summaries below 5/5, plus every verified finding.
-10. GitHub returns one review ID per specialist and one final summary review ID.
+8. A final structured synthesis call produces one headline, a 30-to-70-word overview, one top risk, and one next action.
+9. Pure policy creates one publication plan with copyable fix prompts for specialist reviews below 5/5 and every verified finding.
+10. GitHub adds or replaces the marked one-line summary in the PR description, then returns one review ID per specialist and one final summary review ID.
 11. The Sailbox terminates and `review completed` records counts and estimated total microdollars.
 
 ## Failure handling

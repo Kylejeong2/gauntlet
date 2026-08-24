@@ -39,9 +39,8 @@ export type ChallengeVerdict =
 export type ReviewSummary = Readonly<{
   headline: string;
   overview: string;
-  keyChanges: readonly string[];
-  keyRisks: readonly string[];
-  recommendedActions: readonly string[];
+  topRisk: string;
+  nextAction: string;
 }>;
 
 export type RunState =

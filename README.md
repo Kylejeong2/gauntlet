@@ -16,16 +16,16 @@ Gauntlet reviews public pull requests with DeepSeek V4 Flash through Sail. It ru
 
 ## What you get
 
-|                       | Gauntlet's contract                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------- |
-| Review team           | Eight fixed specialists, with up to two extra specialists when the change needs them        |
-| Independent challenge | Every candidate finding gets a separate attempt to disprove it                              |
-| Pull request summary  | One overall score, a plain-language briefing, key risks, and recommended actions            |
-| Specialist comments   | One readable top-level comment per reviewer, with its score and areas examined              |
-| Inline findings       | At most five confirmed defects, attached to changed lines and attributed to their reviewers |
-| Fix handoff           | Actionable reviews and verified findings include a copyable `Prompt to fix`                 |
-| Cost                  | A hard estimated ceiling of $0.25 per pull request                                          |
-| Execution             | Public repository code runs only in a credential-free Sailbox                               |
+|                       | Gauntlet's contract                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| Review team           | Eight fixed specialists, with up to two extra specialists when the change needs them         |
+| Independent challenge | Every candidate finding gets a separate attempt to disprove it                               |
+| Pull request summary  | One-line PR-description note plus a compact verdict, score, risk, action, cost, and duration |
+| Specialist comments   | One readable top-level comment per reviewer, with its score and areas examined               |
+| Inline findings       | At most five confirmed defects, attached to changed lines and attributed to their reviewers  |
+| Fix handoff           | Actionable reviews and verified findings include a copyable `Prompt to fix`                  |
+| Cost                  | A hard estimated ceiling of $0.25 per pull request                                           |
+| Execution             | Public repository code runs only in a credential-free Sailbox                                |
 
 Gauntlet suppresses positive inline comments, style preferences, duplicates, stale findings, off-diff claims, and findings that fail verification.
 
@@ -59,7 +59,7 @@ flowchart LR
 
 The webhook handler records each eligible delivery before it returns. A leased worker then stores and reloads an immutable snapshot of the exact base and head commits. Paid work starts only after the complete worst-case plan fits within the run budget.
 
-DeepSeek reviewers inspect the snapshot and bounded Sailbox evidence. Separate DeepSeek requests challenge their findings. Gauntlet rejects unconfirmed, duplicate, stale, and unanchorable claims before it publishes the specialist comments, the PR summary, and up to five inline findings.
+DeepSeek reviewers inspect the snapshot and bounded Sailbox evidence. Separate DeepSeek requests challenge their findings. Gauntlet rejects unconfirmed, duplicate, stale, and unanchorable claims before it publishes the specialist comments, a compact final review, up to five inline findings, and one marked summary line in the PR description.
 
 Read [the architecture](docs/architecture.md) for the state model, database tables, recovery rules, and provider boundaries.
 

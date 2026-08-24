@@ -27,6 +27,7 @@ export type PublicationPlan =
       runId: PublicationInput["runId"];
       headSha: PublicationInput["headSha"];
       body: string;
+      pullRequestSummary: string;
       reviewerComments: readonly ReviewerComment[];
       comments: readonly PublicationComment[];
     }>;
@@ -67,8 +68,7 @@ const promptText = (value: string): string => value.replaceAll("`", "'");
 const promptDropdown = (prompt: string): string =>
   `<details>\n<summary>Prompt to fix</summary>\n\n\`\`\`text\n${promptText(prompt)}\n\`\`\`\n</details>`;
 
-const list = (items: readonly string[], empty: string): string =>
-  items.length === 0 ? empty : items.map((item) => `- ${item}`).join("\n");
+const oneLine = (value: string): string => value.replaceAll(/\s+/g, " ").trim();
 
 export const reducePublication = (input: PublicationInput): PublicationPlan => {
   const reportCounts = new Map<string, number>();
@@ -175,16 +175,13 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
   });
   const summary = input.reviewSummary;
   const overallReadiness = averageReadiness(selectedReports);
-  const summaryFixPrompt =
-    overallReadiness === "5.0"
-      ? ""
-      : `\n\n${promptDropdown(`Fix the issues identified by the Gauntlet review for this pull request.\n\nSummary: ${summary.headline}\n${summary.overview}\n\nKey risks:\n${list(summary.keyRisks, "None identified.")}\n\nRecommended actions:\n${list(summary.recommendedActions, "Run the normal project verification.")}\n\nUse the verified inline findings and specialist comments as the source of truth. Make the smallest coherent changes, preserve unrelated behavior, add or update regression tests, run all relevant checks, and report the files changed plus verification results.`)}`;
-  const body = `## Gauntlet summary\n\n### ${summary.headline}\n\n${summary.overview}\n\n## What changed\n\n${list(summary.keyChanges, "No material changes identified.")}\n\n## Key risks\n\n${list(summary.keyRisks, "No verified material risks identified.")}\n\n## Recommended next steps\n\n${list(summary.recommendedActions, "No follow-up required beyond normal review and testing.")}\n\nOverall readiness: ${overallReadiness}/5\n\nCoverage omissions: ${omissions}\n\nEstimated cost: $${(input.estimatedCost / 1_000_000).toFixed(6)}\nDuration: ${formatDurationSeconds(input.durationMs)}\nVerified findings: ${String(comments.length)}${summaryFixPrompt}\n\n<!-- gauntlet-run:${input.runId} -->`;
+  const body = `## Gauntlet summary\n\n**${summary.headline}**\n\n${summary.overview}\n\n**Readiness:** ${overallReadiness}/5 · **Verified findings:** ${String(comments.length)} · **Cost:** $${(input.estimatedCost / 1_000_000).toFixed(6)} · **Duration:** ${formatDurationSeconds(input.durationMs)}\n\n**Top risk:** ${summary.topRisk}\n\n**Next step:** ${summary.nextAction}\n\nCoverage omissions: ${omissions}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",
     runId: input.runId,
     headSha: input.headSha,
     body,
+    pullRequestSummary: oneLine(summary.headline),
     reviewerComments,
     comments,
   };
