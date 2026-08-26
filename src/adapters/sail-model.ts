@@ -355,7 +355,7 @@ const extractOutputText = (
   return undefined;
 };
 
-// Gateway-family statuses the provider returns transiently.
+// Gateway-family statuses the provider returns transiently (429 is rate limiting).
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 
 const wait = (milliseconds: number): Promise<void> =>
