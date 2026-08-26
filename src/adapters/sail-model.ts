@@ -355,6 +355,7 @@ const extractOutputText = (
   return undefined;
 };
 
+// Gateway-family statuses the provider returns transiently.
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 
 const wait = (milliseconds: number): Promise<void> =>
