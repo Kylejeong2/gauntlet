@@ -177,6 +177,43 @@ describe("Sail model contract", () => {
       new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("Idempotency-Key"),
     ).toBeNull();
   });
+
+  it("retries a bad gateway response from the provider", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("upstream unavailable", { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "response-3",
+            status: "completed",
+            output_text: JSON.stringify({
+              reviewer: "security",
+              readiness: 5,
+              rationale: "No reachable defect found.",
+              examinedAreas: ["diff"],
+              findings: [],
+            }),
+            usage: { input_tokens: 10, output_tokens: 10 },
+          }),
+          { status: 200 },
+        ),
+      );
+    const client = new SailModelClient({
+      apiKey: "test-key",
+      fetcher,
+      retryDelaysMs: [0],
+    });
+    const result = await client.review({
+      reviewer: reviewerId("security"),
+      label: "Security",
+      question: "Find defects.",
+      snapshot: "diff",
+      toolEvidence: [],
+    });
+    expect(result.responseId).toBe("response-3");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("Sailbox tool broker", () => {

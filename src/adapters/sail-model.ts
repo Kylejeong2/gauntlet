@@ -285,7 +285,7 @@ export class SailModelClient {
       responseStatus = response.status;
       if (response.ok) break;
       const delay = this.#retryDelaysMs[attempt];
-      const retryable = response.status === 429;
+      const retryable = RETRYABLE_STATUSES.has(response.status);
       if (!retryable || delay === undefined)
         throw new Error(
           `Sail request failed (${String(response.status)}): ${rawBody.slice(0, 500)}`,
@@ -354,6 +354,8 @@ const extractOutputText = (
   }
   return undefined;
 };
+
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => {

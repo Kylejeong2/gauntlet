@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node ./dist/server.js",
+    "postinstall": "node ./scripts/postinstall-metrics.js",
     "dev": "pnpm build && pnpm start",
     "local:configure": "pnpm build && node ./dist/configure-local.js",
     "local:start": "pnpm build && pnpm start",
