@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { reviewerId, usdMicros } from "../src/domain/ids.js";
-import { SailModelClient } from "../src/adapters/sail-model.js";
+import {
+  SAIL_REQUEST_TIMEOUT_MS,
+  SailModelClient,
+} from "../src/adapters/sail-model.js";
 import {
   AllowlistedToolBroker,
   type CommandSandbox,
@@ -8,6 +11,7 @@ import {
 
 describe("Sail model contract", () => {
   it("uses DeepSeek V4 Flash through Sail's synchronous asap contract and accounts for usage", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -69,6 +73,44 @@ describe("Sail model contract", () => {
     expect(request.background).toBeUndefined();
     expect(init.headers).toMatchObject({ Authorization: "Bearer test-key" });
     expect(new Headers(init.headers).get("Idempotency-Key")).toBeNull();
+    expect(timeout).toHaveBeenCalledWith(SAIL_REQUEST_TIMEOUT_MS);
+    timeout.mockRestore();
+  });
+
+  it("allows a shorter request timeout for bounded callers and tests", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+      const signal = init?.signal;
+      if (signal === null || signal === undefined)
+        return Promise.reject(new Error("Expected an abort signal"));
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            reject(
+              signal.reason instanceof Error
+                ? signal.reason
+                : new Error("Request aborted"),
+            );
+          },
+          { once: true },
+        );
+      });
+    });
+    const client = new SailModelClient({
+      apiKey: "test-key",
+      fetcher,
+      requestTimeoutMs: 10,
+    });
+
+    await expect(
+      client.review({
+        reviewer: reviewerId("security"),
+        label: "Security",
+        question: "Find defects.",
+        snapshot: "diff",
+        toolEvidence: [],
+      }),
+    ).rejects.toThrow("aborted due to timeout");
   });
 
   it("fails closed on a malformed model response", async () => {

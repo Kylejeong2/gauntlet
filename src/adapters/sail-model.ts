@@ -17,6 +17,7 @@ export const SAIL_MODEL = "deepseek/deepseek-v4-flash-0731";
 export const SAIL_API_URL = "https://api.sailresearch.com/v1/responses";
 export const SAIL_INPUT_USD_PER_MILLION = 0.09;
 export const SAIL_OUTPUT_USD_PER_MILLION = 0.18;
+export const SAIL_REQUEST_TIMEOUT_MS = 600_000;
 
 const responseEnvelopeSchema = z.looseObject({
   id: z.string().min(1),
@@ -93,6 +94,7 @@ export class SailModelClient {
   readonly #fetcher: typeof fetch;
   readonly #apiUrl: string;
   readonly #retryDelaysMs: readonly number[];
+  readonly #requestTimeoutMs: number;
   readonly #audit: (event: SailModelAuditEvent) => void;
 
   public constructor(
@@ -101,6 +103,7 @@ export class SailModelClient {
       fetcher?: typeof fetch;
       apiUrl?: string;
       retryDelaysMs?: readonly number[];
+      requestTimeoutMs?: number;
       audit?: (event: SailModelAuditEvent) => void;
     }>,
   ) {
@@ -112,6 +115,13 @@ export class SailModelClient {
     this.#retryDelaysMs = options.retryDelaysMs ?? [
       15_000, 30_000, 60_000, 120_000, 240_000,
     ];
+    this.#requestTimeoutMs =
+      options.requestTimeoutMs ?? SAIL_REQUEST_TIMEOUT_MS;
+    if (
+      !Number.isSafeInteger(this.#requestTimeoutMs) ||
+      this.#requestTimeoutMs <= 0
+    )
+      throw new Error("requestTimeoutMs must be a positive integer");
     this.#audit =
       options.audit ??
       ((event) => {
@@ -279,7 +289,7 @@ export class SailModelClient {
           "Content-Type": "application/json",
         },
         body,
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });
       rawBody = await response.text();
       responseStatus = response.status;
