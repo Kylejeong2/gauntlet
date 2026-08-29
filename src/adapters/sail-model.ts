@@ -159,7 +159,7 @@ export class SailModelClient {
       { operation: "review", correlationId: request.reviewer },
     );
     const parsed = reviewerReportSchema.safeParse(
-      parseJsonObject(result.value),
+      normalizeReviewerDescription(parseJsonObject(result.value)),
     );
     if (!parsed.success)
       throw new Error(
@@ -400,6 +400,26 @@ const parseJsonObject = (value: string): unknown => {
     }
     throw new Error("Sail response contained no valid JSON object");
   }
+};
+
+const normalizeReviewerDescription = (value: unknown): unknown => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("examinedAreas" in value) ||
+    !Array.isArray(value.examinedAreas)
+  )
+    return value;
+  const examinedAreas = value.examinedAreas.filter(
+    (area) => typeof area !== "string" || area.trim().length > 0,
+  );
+  return {
+    ...value,
+    examinedAreas:
+      examinedAreas.length === 0
+        ? ["Supplied pull-request snapshot"]
+        : examinedAreas,
+  };
 };
 
 const findingProperties = (reviewer: ReviewerId) => ({

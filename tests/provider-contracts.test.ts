@@ -161,6 +161,42 @@ describe("Sail model contract", () => {
     ).rejects.toThrow("Invalid Sail reviewer response");
   });
 
+  it("normalizes empty descriptive reviewer areas without weakening findings", async () => {
+    const client = new SailModelClient({
+      apiKey: "test-key",
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: "response-empty-area",
+            status: "completed",
+            output_text: JSON.stringify({
+              reviewer: "adversarial-testing",
+              readiness: 5,
+              rationale: "No concrete defect found.",
+              examinedAreas: [""],
+              findings: [],
+            }),
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    });
+
+    const result = await client.review({
+      reviewer: reviewerId("adversarial-testing"),
+      label: "Adversarial testing",
+      question: "Find defects.",
+      snapshot: "diff",
+      toolEvidence: [],
+    });
+
+    expect(result.report.examinedAreas).toEqual([
+      "Supplied pull-request snapshot",
+    ]);
+    expect(result.report.findings).toEqual([]);
+  });
+
   it("produces a structured PR-level synthesis with usage accounting", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
