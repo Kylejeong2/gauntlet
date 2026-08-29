@@ -82,6 +82,7 @@ describe("Sail model contract", () => {
                 maxItems: 3,
                 items: {
                   properties: {
+                    id: { maxLength: 255 },
                     evidence: { maxLength: 4_000 },
                     proposedAction: { maxLength: 2_000 },
                   },

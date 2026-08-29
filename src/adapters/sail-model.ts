@@ -423,7 +423,7 @@ const normalizeReviewerDescription = (value: unknown): unknown => {
 };
 
 const findingProperties = (reviewer: ReviewerId) => ({
-  id: { type: "string", minLength: 1 },
+  id: { type: "string", minLength: 1, maxLength: 255 },
   reviewer: { type: "string", const: reviewer },
   location: {
     type: "object",
