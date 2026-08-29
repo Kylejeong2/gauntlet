@@ -191,7 +191,16 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
       body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}${fixPrompt}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
     };
   });
-  const summary = input.reviewSummary;
+  const summary =
+    comments.length === 0
+      ? {
+          headline: "No verified findings",
+          overview:
+            "Gauntlet completed every specialist review and challenge. No candidate passed the deterministic changed-line, challenge, deduplication, and corroboration policy, so no actionable finding remains for this head.",
+          topRisk: "No verified material risk remains.",
+          nextAction: "No review action required.",
+        }
+      : input.reviewSummary;
   const overallReadiness = averageReadiness(
     effectiveReports.map((report) => report.readiness),
   );

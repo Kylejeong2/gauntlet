@@ -259,6 +259,8 @@ The planner does not start a partial organization. If the full worst-case plan c
 10. Add a collapsed copyable `Prompt to fix` to specialist comments with an actionable score below 5/5 and every verified inline finding. The final summary never contains a fix prompt.
 11. Add or replace one hidden-marker Gauntlet note in the pull request description. Preserve all author-written content and collapse the generated headline to one line.
 
+When the final publishable set is empty, the reducer replaces model-authored risk and action prose with a deterministic no-findings summary. This prevents rejected, inconclusive, or uncorroborated candidates from leaking into an otherwise 5/5 result as contradictory guidance.
+
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
 
 The GitHub adapter checks the current head, then creates one COMMENT review with all validated comments. A hidden run marker lets a recovered worker find a review that GitHub accepted before the local completion write. The adapter never falls back to a visible flood of individual comments.

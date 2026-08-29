@@ -258,6 +258,13 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
         "<summary>Prompt to fix</summary>",
       );
       expect(result.body).toContain("**Readiness:** 5.0/5");
+      expect(result.body).toContain("**No verified findings**");
+      expect(result.body).toContain(
+        "**Next step:** No review action required.",
+      );
+      expect(result.body).not.toContain("Ready to merge");
+      expect(result.body).not.toContain("unverified blocker");
+      expect(result.body).not.toContain("Fix the uncorroborated claim");
       expect(result.body).not.toContain("<summary>Prompt to fix</summary>");
     }
   });
@@ -299,12 +306,20 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
       coverageOmissions: [],
       estimatedCost: usdMicros(1_000),
       durationMs: 1_000,
-      reviewSummary,
+      reviewSummary: {
+        ...reviewSummary,
+        headline: "An unverified blocker needs fixing",
+        topRisk: "An uncorroborated claim could be material.",
+        nextAction: "Fix the uncorroborated claim.",
+      },
     });
 
     expect(result.kind).toBe("publish");
     if (result.kind === "publish") {
       expect(result.body).toContain("**Readiness:** 5.0/5");
+      expect(result.body).toContain("**No verified findings**");
+      expect(result.body).not.toContain("unverified blocker");
+      expect(result.body).not.toContain("Fix the uncorroborated claim");
       expect(result.comments).toHaveLength(0);
       expect(result.reviewerComments).toHaveLength(2);
       for (const comment of result.reviewerComments) {
