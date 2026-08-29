@@ -144,6 +144,7 @@ export class SailModelClient {
         "Return a 1-to-5 readiness score and at most three concrete defects.",
         "A report with no concrete finding must score readiness 5. Every score below 5 must include at least one finding whose exact changed line proves the gap.",
         "Do not lower readiness for missing, failed, or unavailable sandbox evidence unless a changed line demonstrably caused that failure.",
+        "Do not return two findings with the same stableIdentity; combine semantic duplicates into the strongest supported finding.",
         "Keep the rationale under 120 words and every finding field under 80 words.",
         "Return only the JSON object required by the response schema.",
         "Do not report style preferences, praise, or speculative risks.",

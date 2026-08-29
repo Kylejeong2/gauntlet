@@ -12,6 +12,7 @@ import type {
   ReviewerReport,
   ReviewSummary,
 } from "../domain/types.js";
+import { deduplicateReportFindings } from "../domain/reviewer-reports.js";
 import {
   commitSha,
   deliveryId,
@@ -1225,7 +1226,9 @@ export class SqliteRunStore {
       createdAtMs: number;
     }>,
   ): ReviewerReport {
-    const report = reviewerReportSchema.parse(request.report);
+    const report = deduplicateReportFindings(
+      reviewerReportSchema.parse(request.report),
+    );
     return this.#database.transaction(() => {
       const existing = this.#database
         .prepare(

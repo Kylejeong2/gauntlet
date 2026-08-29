@@ -506,4 +506,45 @@ describe("SQLite RunStore", () => {
       }),
     ).toEqual(verdict);
   });
+
+  it("deduplicates semantic findings before the atomic report checkpoint", () => {
+    store.acceptRun(request());
+    const first = {
+      id: findingId("finding-low"),
+      reviewer: reviewerId("performance"),
+      location: { path: "src/index.ts", line: 1 },
+      severity: "low" as const,
+      confidence: 0.7,
+      title: "Repeated work",
+      trigger: "Call the changed path.",
+      evidence: "The same work is repeated.",
+      proposedAction: "Reuse the result.",
+      stableIdentity: "repeated-work",
+    };
+    const stronger = {
+      ...first,
+      id: findingId("finding-high"),
+      severity: "high" as const,
+      confidence: 0.9,
+      evidence:
+        "The changed loop repeats the same expensive work for every item.",
+    };
+    const stored = store.putReviewerReportOnce({
+      runId: runId("run-aaaaaaa"),
+      report: {
+        reviewer: reviewerId("performance"),
+        readiness: 2,
+        rationale: "One performance defect remains.",
+        examinedAreas: ["changed loop"],
+        findings: [first, stronger],
+      },
+      cost: usdMicros(100),
+      createdAtMs: 1_000,
+    });
+
+    expect(stored.findings).toEqual([stronger]);
+    expect(store.getReviewerReports(runId("run-aaaaaaa"))[0]?.findings).toEqual(
+      [stronger],
+    );
+  });
 });
