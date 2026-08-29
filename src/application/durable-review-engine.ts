@@ -315,12 +315,30 @@ export class DurableReviewEngine {
 
   async #cleanup(lease: WorkLease): Promise<void> {
     const sandbox = this.#store.getSailbox(lease.runId);
-    if (sandbox?.status === "active" && sandbox.id !== null) {
+    if (sandbox !== null && sandbox.status !== "terminated") {
       const input = this.#reviewInput(lease.runId);
-      const handle = await this.#ports.sandbox.resume(input, {
-        id: sandbox.id,
-      });
+      const handle =
+        sandbox.status === "active" && sandbox.id !== null
+          ? await this.#ports.sandbox.resume(input, { id: sandbox.id })
+          : await this.#ports.sandbox.find(input, sandbox.name);
+      if (handle === null)
+        throw new Error(
+          `Pending Sailbox ${sandbox.name} could not be reconciled for cleanup`,
+        );
       this.#fence(lease);
+      if (sandbox.status === "creating") {
+        this.#store.recordSailboxCreated({
+          runId: lease.runId,
+          id: handle.id,
+          estimatedCost: handle.estimatedCost ?? usdMicros(0),
+          createdAtMs: this.#clock(),
+        });
+        this.#audit({
+          kind: "sailbox_reconciled",
+          runId: lease.runId,
+          sailboxId: handle.id,
+        });
+      }
       await this.#terminateSandbox(lease, handle);
     }
     const progress = this.#store.getRunProgress(lease.runId);

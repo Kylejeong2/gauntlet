@@ -239,6 +239,61 @@ describe("durable review engine", () => {
     expect(store.getRunProgress(targetRunId).state).toBe("completed");
   });
 
+  it("reconciles and terminates a Sailbox whose creation receipt was lost before cleanup", async () => {
+    const reviewed: string[] = [];
+    const base = makePorts(reviewed);
+    let findCalls = 0;
+    const terminated: string[] = [];
+    const ports: DurableReviewEnginePorts = {
+      ...base,
+      sandbox: {
+        ...base.sandbox,
+        find: () => {
+          findCalls += 1;
+          return Promise.resolve({
+            id: "orphaned-box",
+            estimatedCost: usdMicros(10_000),
+          });
+        },
+        terminate: (handle) => {
+          terminated.push(handle.id);
+          return Promise.resolve();
+        },
+      },
+    };
+    const engine = new DurableReviewEngine({
+      store,
+      ports,
+      clock: () => 2_000,
+    });
+    const snapshot = claim();
+    if (snapshot === null) throw new Error("Expected snapshot work");
+    await engine.advance(snapshot);
+    const plan = claim();
+    if (plan === null) throw new Error("Expected plan work");
+    await engine.advance(plan);
+    store.beginSailbox({
+      runId: targetRunId,
+      name: "gauntlet-run-durable",
+      createdAtMs: 1_999,
+    });
+    store.requestCancellation({
+      runId: targetRunId,
+      reason: "superseded head",
+      requestedAtMs: 2_000,
+    });
+    for (;;) {
+      const lease = claim();
+      if (lease === null) break;
+      await engine.advance(lease);
+    }
+
+    expect(findCalls).toBe(1);
+    expect(terminated).toEqual(["orphaned-box"]);
+    expect(store.getSailbox(targetRunId)?.status).toBe("terminated");
+    expect(store.getRunProgress(targetRunId).state).toBe("failed");
+  });
+
   it("reconciles a published GitHub review after a lost local receipt", async () => {
     const reviewed: string[] = [];
     const base = makePorts(reviewed);
