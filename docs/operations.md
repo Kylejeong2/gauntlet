@@ -16,7 +16,7 @@ Stop the process with a normal termination signal. Do not delete a live SQLite d
 6. The Sailbox terminates after reviewer evidence; a retry reattaches an active box or creates a new attempt without repeating stored reports.
 7. Candidate challenges run serially and each verdict is checkpointed.
 8. A final structured synthesis call produces one headline, a 30-to-70-word overview, one top risk, and one next action.
-9. Pure policy creates one publication plan. Only specialists with challenge-confirmed, changed-line findings can score below 5/5 or receive a copyable fix prompt.
+9. Pure policy creates one publication plan. Only specialists with findings that pass challenge, changed-line, deduplication, and corroboration policy can score below 5/5 or receive a copyable fix prompt.
 10. GitHub adds or replaces the marked one-line summary in the PR description, then returns one review ID per specialist and one final summary review ID.
 11. Cleanup reconciles any active Sailbox, settles checkpointed cost, and marks the run complete.
 

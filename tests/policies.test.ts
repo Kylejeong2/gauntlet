@@ -262,8 +262,8 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
     }
   });
 
-  it("does not depress readiness or offer fixes without an actionable finding", () => {
-    const rejected = finding({
+  it("does not depress readiness or offer fixes without a publishable finding", () => {
+    const uncorroborated = finding({
       reviewer: reviewerId("documentation"),
       location: { path: "README.md", line: 1 },
     });
@@ -283,15 +283,15 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
           findings: [],
         },
         {
-          ...report(rejected),
+          ...report(uncorroborated),
           readiness: 1,
         },
       ],
       challenges: [
         {
-          kind: "rejected",
-          findingId: rejected.id,
-          reason: "The claimed defect is not present.",
+          kind: "confirmed",
+          findingId: uncorroborated.id,
+          reason: "The claim is supported but has no corroborating reviewer.",
         },
       ],
       changedLines: [{ path: "README.md", lines: [1] }],

@@ -36,7 +36,7 @@ The SQLite integration tests execute direct migrations against a real in-memory 
 
 The GitHub suites cover complete event classification, public-only, draft, bot, and unsupported-action filtering, unified-patch right-side line extraction, constant-time webhook signature verification, exact-SHA comparison, merge-base capture, bounded pagination, prior stable-marker extraction, exact-head COMMENT review rendering, separate specialist comments, idempotent PR-description summary replacement, preservation of author text, and final summary publication.
 
-The Sail suites assert the DeepSeek V4 Flash model slug, `metadata.completion_window: "asap"`, low reasoning effort, strict reviewer and final-synthesis output parsing, reasoning-item exclusion, integer-microdollar token accounting at current DeepSeek rates, bounded 429 retry, malformed-response failure, and reviewer identity preservation.
+The Sail suites assert the DeepSeek V4 Flash model slug, `metadata.completion_window: "asap"`, low reasoning effort, strict reviewer and final-synthesis output parsing, reasoning-item exclusion, integer-microdollar token accounting at current DeepSeek rates, bounded 429 retry, malformed-response failure, reviewer identity preservation, and downgrade of confirmations that do not cite the exact changed path.
 
 The Sailbox suites assert size `s` with the live provider minimums, public HTTPS clone, exact merge-base and head fetch, detached checkout, merge-base-scoped evidence, empty command environments, argument arrays, timeouts, bounded output, allowlisted project commands, setup-failure cleanup, and normal termination.
 

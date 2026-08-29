@@ -126,10 +126,6 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     )
     .filter((candidate) => !prior.has(candidate.stableIdentity))
     .sort(strongerFirst);
-  const actionableReviewers = new Set(
-    candidates.map((candidate) => candidate.reviewer),
-  );
-
   const byLocation = new Map<string, CandidateFinding[]>();
   for (const candidate of candidates) {
     const key = `${candidate.location.path}:${String(candidate.location.line)}`;
@@ -162,6 +158,21 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     finding: candidate,
     body: `**${reviewerTitle(candidate.reviewer)} reviewer · ${candidate.severity.toUpperCase()}: ${candidate.title}**\n\nTrigger: ${candidate.trigger}\n\nEvidence: ${candidate.evidence}\n\nAction: ${candidate.proposedAction}\n\n${promptDropdown(`Fix the verified ${candidate.severity} finding from the ${reviewerTitle(candidate.reviewer)} reviewer in ${candidate.location.path} at changed line ${String(candidate.location.line)}.\n\nProblem: ${candidate.title}\nTrigger: ${candidate.trigger}\nEvidence: ${candidate.evidence}\nRequired action: ${candidate.proposedAction}\n\nMake the smallest safe change, preserve unrelated behavior, add or update a regression test that proves the defect is fixed, and run the relevant project checks. Summarize the code changed and the verification performed.`)}\n\n<!-- gauntlet:${candidate.stableIdentity} -->`,
   }));
+  const publishableLocations = new Set(
+    selected.map(
+      (candidate) =>
+        `${candidate.location.path}:${String(candidate.location.line)}`,
+    ),
+  );
+  const actionableReviewers = new Set(
+    candidates
+      .filter((candidate) =>
+        publishableLocations.has(
+          `${candidate.location.path}:${String(candidate.location.line)}`,
+        ),
+      )
+      .map((candidate) => candidate.reviewer),
+  );
   const omissions =
     input.coverageOmissions.length === 0
       ? "None"

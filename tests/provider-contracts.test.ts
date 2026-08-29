@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { reviewerId, usdMicros } from "../src/domain/ids.js";
+import { findingId, reviewerId, usdMicros } from "../src/domain/ids.js";
 import {
   SAIL_REQUEST_TIMEOUT_MS,
   SailModelClient,
@@ -198,6 +198,44 @@ describe("Sail model contract", () => {
     };
     expect(request.metadata?.completion_window).toBe("asap");
     expect(request.text?.format?.name).toBe("review_summary");
+  });
+
+  it("downgrades an ungrounded confirmation that omits the changed path", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "response-challenge",
+          status: "completed",
+          output_text: JSON.stringify({
+            outcome: "confirmed",
+            reason: "The candidate appears plausible.",
+          }),
+          usage: { input_tokens: 10, output_tokens: 10 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const client = new SailModelClient({ apiKey: "test-key", fetcher });
+
+    const result = await client.challenge({
+      finding: {
+        id: findingId("race-1"),
+        reviewer: reviewerId("concurrency"),
+        location: { path: "src/worker.ts", line: 42 },
+        severity: "medium",
+        confidence: 0.8,
+        title: "Duplicate side effect",
+        trigger: "A lease expires during publication.",
+        evidence: "The worker publishes without a current claim.",
+        proposedAction: "Fence the receipt.",
+        stableIdentity: "duplicate-side-effect",
+      },
+      snapshot: "src/worker.ts changed on line 42",
+      toolEvidence: [],
+    });
+
+    expect(result.verdict.kind).toBe("inconclusive");
+    expect(result.verdict.reason).toContain("src/worker.ts");
   });
 
   it("retries a transient rate limit without changing models", async () => {

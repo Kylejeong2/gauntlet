@@ -247,7 +247,7 @@ The planner does not start a partial organization. If the full worst-case plan c
 
 `reducePublication` performs these deterministic checks:
 
-1. Require one valid score for every selected reviewer, but treat it as 5/5 unless that reviewer has a challenge-confirmed finding on a changed line.
+1. Require one valid score for every selected reviewer, but treat it as 5/5 unless that reviewer has a finding in the final publishable set.
 2. Keep only confirmed findings.
 3. Validate every path and right-side line against the immutable snapshot.
 4. Group semantic duplicates and retain the finding with stronger evidence.

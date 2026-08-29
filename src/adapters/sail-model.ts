@@ -190,6 +190,7 @@ export class SailModelClient {
         "You are an independent verification reviewer.",
         "Try to disprove the candidate finding using only the supplied snapshot and evidence.",
         "Confirm only when the trigger is reachable and the evidence supports the claimed impact.",
+        "A confirmed reason must name the exact changed file path and explain how its supplied evidence proves the reachable trigger. Otherwise return rejected or inconclusive.",
         "Use rejected for false positives and inconclusive when proof is insufficient.",
         `Candidate finding:\n${JSON.stringify(request.finding)}`,
         `Snapshot:\n${request.snapshot}`,
@@ -205,10 +206,22 @@ export class SailModelClient {
       parseJsonObject(result.value),
     );
     if (!output.success) throw new Error("Invalid Sail challenge response");
+    const groundedOutcome =
+      output.data.outcome === "confirmed" &&
+      !output.data.reason.includes(request.finding.location.path)
+        ? "inconclusive"
+        : output.data.outcome;
+    const reason =
+      groundedOutcome === output.data.outcome
+        ? output.data.reason
+        : `Confirmation did not cite the exact changed path ${request.finding.location.path}. ${output.data.reason}`.slice(
+            0,
+            2_000,
+          );
     const verdict = challengeVerdictSchema.parse({
-      kind: output.data.outcome,
+      kind: groundedOutcome,
       findingId: findingId(request.finding.id),
-      reason: output.data.reason,
+      reason,
     });
     return { verdict, cost: result.cost, responseId: result.responseId };
   }
