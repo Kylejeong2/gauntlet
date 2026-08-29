@@ -15,14 +15,12 @@ import {
   SailSdkFactory,
 } from "./adapters/sailbox.js";
 import {
-  estimateWorstCaseRunCost,
-  runReview,
-} from "./application/review-runner.js";
+  DurableReviewEngine,
+  type DurableReviewEnginePorts,
+} from "./application/durable-review-engine.js";
 import { DurableReviewWorker } from "./application/worker.js";
 import { loadRuntimeConfig } from "./config.js";
-import { deliveryId, runId, workerId } from "./domain/ids.js";
-import { selectReviewers } from "./domain/reviewers.js";
-import { projectSnapshot } from "./domain/snapshot.js";
+import { deliveryId, runId, workerId, type RunId } from "./domain/ids.js";
 import { migrate } from "./storage/migrations.js";
 import { SqliteRunStore, type QueuedRun } from "./storage/run-store.js";
 
@@ -32,20 +30,33 @@ export default (app: Probot): void => {
   const database = new Database(config.databasePath);
   migrate(database);
   const store = new SqliteRunStore(database);
+  const sandbox = new SailboxReviewEnvironment(
+    new SailSdkFactory(),
+    (event) => {
+      app.log.info(event, "sailbox audit event");
+    },
+  );
+  const engine = new DurableReviewEngine({
+    store,
+    ports: durablePorts(app, config.sailApiKey, sandbox),
+  });
   const worker = new DurableReviewWorker({
     workerId: workerId(`worker-${randomUUID()}`),
     leaseDurationMs: 30 * 60 * 1_000,
     store,
-    execute: async (run) => {
+    execute: async (lease) => {
       try {
-        await executeQueuedRun(app, store, config.sailApiKey, run);
+        await engine.advance(lease);
       } catch (error: unknown) {
         app.log.error(
           {
-            runId: run.runId,
+            runId: lease.runId,
+            workKey: lease.workKey,
+            workKind: lease.kind,
+            attempt: lease.attempt,
             error: error instanceof Error ? error.message : "unknown error",
           },
-          "review failed",
+          "durable review phase failed",
         );
         throw error;
       }
@@ -156,113 +167,64 @@ export default (app: Probot): void => {
   });
 };
 
-const executeQueuedRun = async (
+const durablePorts = (
   app: Probot,
-  store: SqliteRunStore,
   sailApiKey: string,
-  run: QueuedRun,
-): Promise<void> => {
-  const model = new SailModelClient({
-    apiKey: sailApiKey,
-    audit: (event) => {
-      app.log.info({ runId: run.runId, ...event }, "model audit event");
-    },
-  });
-  const sandbox = new SailboxReviewEnvironment(
-    new SailSdkFactory(),
-    (event) => {
-      app.log.info({ runId: run.runId, ...event }, "sailbox audit event");
-    },
-  );
-  const octokit = await app.auth(run.installationId);
-  const github = new GitHubReviewClient(makePullRequestApi(octokit), {
-    owner: run.owner,
-    repository: run.repository,
-    pullNumber: run.pullNumber,
-  });
-  const existing = await github.findExisting(run.runId);
-  if (existing !== null) {
-    app.log.info(
-      { runId: run.runId, reviewId: existing.reviewId },
-      "published review reconciled",
-    );
-    return;
-  }
-  const captured =
-    store.getSnapshot(run.runId) ??
-    store.putSnapshotOnce({
-      runId: run.runId,
-      snapshot: await github.snapshot({
+  sandbox: SailboxReviewEnvironment,
+): DurableReviewEnginePorts => ({
+  model: {
+    review: ({ runId: targetRunId, ...request }) =>
+      modelForRun(app, sailApiKey, targetRunId).review(request),
+    challenge: ({ runId: targetRunId, ...request }) =>
+      modelForRun(app, sailApiKey, targetRunId).challenge(request),
+    summarize: ({ runId: targetRunId, ...request }) =>
+      modelForRun(app, sailApiKey, targetRunId).summarize(request),
+  },
+  sandbox,
+  audit: (event) => {
+    app.log.info(event, "durable review checkpoint");
+  },
+  github: {
+    snapshot: async (run) => {
+      const github = await githubForRun(app, run);
+      return github.snapshot({
         runId: run.runId,
         installationId: run.installationId,
         repositoryId: run.repositoryId,
         baseSha: run.baseSha,
         headSha: run.headSha,
-      }),
-      capturedAtMs: Date.now(),
-    });
-  const snapshot = projectSnapshot(captured);
-  const priorStableIdentities = await github.priorStableIdentities();
-  const optional = [
-    /(?:^|\/)tests?\//i.test(snapshot.text) ||
-    /\.(?:test|spec)\./i.test(snapshot.text)
-      ? "test-quality"
-      : undefined,
-    /\b(?:mutex|lock|atomic|concurr|parallel|worker|queue|transaction)\b/i.test(
-      snapshot.text,
-    )
-      ? "concurrency"
-      : undefined,
-  ].filter((value): value is string => value !== undefined);
-  const reviewers = selectReviewers(optional);
-  const reservation = store.reserveBudget({
-    runId: run.runId,
-    key: "worst-case-run",
-    amount: estimateWorstCaseRunCost(reviewers.length),
-    createdAtMs: Date.now(),
+      });
+    },
+    priorStableIdentities: async (run) =>
+      (await githubForRun(app, run)).priorStableIdentities(),
+    findExisting: async (run) =>
+      (await githubForRun(app, run)).findExisting(run.runId),
+    publish: async (run, plan) => (await githubForRun(app, run)).publish(plan),
+  },
+});
+
+const modelForRun = (
+  app: Probot,
+  sailApiKey: string,
+  targetRunId: RunId,
+): SailModelClient =>
+  new SailModelClient({
+    apiKey: sailApiKey,
+    audit: (event) => {
+      app.log.info({ runId: targetRunId, ...event }, "model audit event");
+    },
   });
-  if (reservation.kind === "denied")
-    throw new Error("Run budget reservation denied");
-  const result = await runReview(
-    {
-      runId: run.runId,
-      owner: run.owner,
-      repository: run.repository,
-      pullNumber: run.pullNumber,
-      baseSha: run.baseSha,
-      mergeBaseSha: captured.mergeBaseSha,
-      headSha: run.headSha,
-      snapshotText: snapshot.text,
-      changedLines: snapshot.changedLines,
-      priorStableIdentities,
-      coverageOmissions: snapshot.coverageOmissions,
-      reviewers,
-    },
-    {
-      sandbox,
-      model,
-      github,
-      audit: (event) => {
-        app.log.info({ runId: run.runId, ...event }, "review audit event");
-      },
-    },
-  );
-  store.settleBudget({
-    runId: run.runId,
-    key: "worst-case-run",
-    actualAmount: result.cost,
-    settledAtMs: Date.now(),
+
+const githubForRun = async (
+  app: Probot,
+  run: QueuedRun,
+): Promise<GitHubReviewClient> => {
+  const octokit = await app.auth(run.installationId);
+  return new GitHubReviewClient(makePullRequestApi(octokit), {
+    owner: run.owner,
+    repository: run.repository,
+    pullNumber: run.pullNumber,
   });
-  app.log.info(
-    {
-      runId: run.runId,
-      reviewId: result.reviewId,
-      reviewerCount: result.reports.length,
-      challengeCount: result.challenges.length,
-      estimatedTotalUsdMicros: result.cost,
-    },
-    "review completed",
-  );
 };
 
 type InstallationOctokit = Awaited<ReturnType<Probot["auth"]>>;

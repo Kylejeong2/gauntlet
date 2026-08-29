@@ -30,7 +30,7 @@ The domain tests cover the eight mandatory and two optional reviewer definitions
 
 The pure-policy tests cover conservative integer-microdollar estimates, the $0.25 reservation ceiling, challenge failure closure, exact changed-line validation, cross-specialist corroboration, same-line collapse, stable-identity suppression, deterministic deduplication and ranking, the five-comment ceiling, separate reviewer-comment rendering, compact summary rendering without a fix prompt, fix prompts for specialist scores below 5/5, no fix prompt for 5/5 specialist comments, copyable fix prompts on verified findings, sensitive-value redaction, and deterministic scheduling. These checks map to AC-7, AC-8, AC-10, AC-13, and AC-15.
 
-The SQLite integration tests execute direct migrations against a real in-memory SQLite database. They cover duplicate deliveries, rejected-delivery reasons, same-target delivery idempotency, new-head runs, immutable snapshot put and reload, snapshot conflicts, lease exclusion, expired-lease recovery, stale-owner rejection, idempotent budget reservation, and overflow denial. These checks map to AC-1, AC-2, AC-3, AC-10, AC-13, AC-14, and the applicable SQLite layer of AC-16.
+The SQLite integration tests execute direct migrations against a real in-memory SQLite database. They cover duplicate deliveries, rejected-delivery reasons, same-target delivery idempotency, new-head runs, immutable snapshot put and reload, snapshot conflicts, version-three in-flight migration, atomic successor scheduling, lease exclusion, heartbeat extension, expired-lease recovery, stale-owner rejection, bounded retry, cleanup dead-lettering, put-once reviewer and challenge checkpoints, idempotent budget reservation, and overflow denial. These checks map to AC-1, AC-2, AC-3, AC-10, AC-13, AC-14, and the applicable SQLite layer of AC-16.
 
 ## Provider and orchestration contracts
 
@@ -40,7 +40,7 @@ The Sail suites assert the DeepSeek V4 Flash model slug, `metadata.completion_wi
 
 The Sailbox suites assert size `s` with the live provider minimums, public HTTPS clone, exact merge-base and head fetch, detached checkout, merge-base-scoped evidence, empty command environments, argument arrays, timeouts, bounded output, allowlisted project commands, setup-failure cleanup, and normal termination.
 
-The orchestration suites prove all selected reviewers run serially, every candidate gets a distinct challenge call, one synthesis runs after those results exist, reviewer or provider failure publishes nothing, sandbox cleanup runs in a `finally` path, the full ten-reviewer plan reserves $0.133, and successful output creates one publication plan.
+The durable-engine suite proves serial specialist execution through checkpoints, one synthesis after stored results, cleanup after review work, the full ten-reviewer bounded retry reservation of $0.171, end-to-end phase advancement, restart without repeating a stored reviewer report, deterministic-name Sailbox reconciliation after a lost creation receipt, and GitHub review reconciliation after a lost publication receipt. Pure publication-policy tests continue to cover distinct challenge requirements, missing-result closure, and final publication shaping.
 
 These tests extend coverage through AC-1 to AC-11, AC-13 to AC-15, and the implemented portions of AC-16.
 
@@ -71,3 +71,5 @@ Public PR #2 run `93c13d9a-4ab7-4735-8db0-216d9e753007` ran in Sailbox `sb_f7c93
 The first production modules were preceded by tests importing the intended domain and storage boundaries. The initial `pnpm test` run failed because `src/domain/ids.ts`, `src/domain/budget.ts`, and `src/storage/run-store.ts` did not exist. After implementation, the same suites run without mocks against the pure policies and SQLite.
 
 The provider and orchestration modules followed the same sequence. Their initial suites failed on missing `src/adapters` and `src/application` modules. The next runs exposed an obsolete Sail request field, undersized Sailbox resources, provider identity drift, and missing cleanup details before the final green gate.
+
+The resumable engine began with four failing SQLite contract tests because work-item claiming and report/challenge checkpoint methods did not exist. The next engine test failed because `durable-review-engine.ts` did not exist. The implemented tests now drive the public `advance` interface through restart, external-effect reconciliation, cleanup, and terminal completion.

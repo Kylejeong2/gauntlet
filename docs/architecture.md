@@ -1,12 +1,12 @@
 # Gauntlet architecture
 
-Status: accepted design for ProductSpec revision 1. Implementation and live verification are tracked separately.
+Status: accepted design for ProductSpec revision 2. Implementation and live verification are tracked separately.
 
 ## Implemented foundation
 
 The implementation provides the SDK-independent domain and SQLite foundation described here: branded boundary constructors, discriminated run states, the ten-entry reviewer registry, strict reviewer and finding schemas, the integer-microdollar budget policy, the pure challenge-gated publication reducer, structured-value redaction, `deriveNextWork`, direct migrations, and durable acceptance, lease, and budget-reservation operations.
 
-Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, an idempotent PR-description summary, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. The application layer admits the worst-case plan, collects bounded reviewer evidence, serializes reviewer and challenge calls, reduces results, publishes, and terminates the box. The authenticated webhook durably records accepted and rejected deliveries. A leased worker processes new and expired runs. Stable run and reviewer markers reconcile publication after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
+Concrete adapters cover public GitHub exact-SHA comparison, immutable snapshot persistence, separate reviewer-comment publication, a compact finding review, an idempotent PR-description summary, DeepSeek V4 Flash through Sail's Responses API, and exact-head execution in one Sailbox. `DurableReviewEngine.advance` executes one leased phase and checkpoints reviewer reports, findings, challenges, summaries, Sailbox receipts, publication intent, and audit events before advancing. The authenticated webhook records the run and initial snapshot work atomically. Stable run, reviewer, Sailbox-name, and publication markers reconcile external effects after a crash. The installed-App flow has passed against vulnerable and clean public fixtures. [Testing Gauntlet](testing.md) records the evidence.
 
 ## What Gauntlet does
 
@@ -50,11 +50,11 @@ return new Response(null, {
 });
 ```
 
-The worker repeatedly claims a lease and advances one run. A restart can call the same function again.
+The worker repeatedly claims one phase work item and asks the deep execution module to advance it. The worker heartbeats long leases and schedules bounded retries; a restart reloads checkpoints and skips completed model work.
 
 ```ts
-while (const lease = runs.claimNext({ workerId, now: clock.now() })) {
-  await executeRun(lease, dependencies);
+while (const lease = runs.claimNextWork({ workerId, nowMs: clock.now() })) {
+  await engine.advance(lease);
 }
 ```
 
@@ -129,7 +129,11 @@ stateDiagram-v2
     publishing --> cleaning_up: bounded retries exhausted
 ```
 
-Every transition and its follow-up work item commit in one SQLite transaction. A work item has a stable key, an owner, a lease deadline, an attempt count, and a terminal receipt. Expired leases return to the queue. Cleanup remains required after any state that may have created a Sailbox.
+Every transition and its follow-up work item commit in one SQLite transaction. A work item has a stable key, an owner, a lease deadline, an attempt count, a maximum-attempt limit, retry timing, and a terminal receipt. Heartbeats extend active work, expired leases return to the queue, and the third failed attempt dead-letters the phase into cleanup. Cleanup remains required after any state that may have created a Sailbox.
+
+Reviewer reports and their findings commit together. Challenge verdicts and final synthesis are put-once checkpoints: an equal retry reuses the stored value and a conflicting retry fails closed. A process restart can therefore repeat at most the currently uncheckpointed external request rather than the complete review.
+
+Sailbox creation writes a deterministic-name intent before contacting Sail. Recovery searches that exact name before creating another box, can reattach by persisted ID, verifies the checked-out head, and records termination. GitHub publication writes a body digest before submission and searches the stable run marker before retrying. These reconciliation paths close the two external side-effect windows that cannot be covered by a local transaction.
 
 ## Reviewer organization
 

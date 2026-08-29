@@ -48,6 +48,8 @@ describe("Sailbox lifecycle", () => {
         creates.push(options);
         return Promise.resolve(instance);
       },
+      get: () => Promise.resolve(instance),
+      findByName: () => Promise.resolve(null),
     };
     const environment = new SailboxReviewEnvironment(factory);
     const input = {
@@ -158,6 +160,8 @@ describe("Sailbox lifecycle", () => {
             return Promise.resolve();
           },
         }),
+      get: () => Promise.reject(new Error("not used")),
+      findByName: () => Promise.resolve(null),
     };
     const environment = new SailboxReviewEnvironment(factory);
     await expect(
