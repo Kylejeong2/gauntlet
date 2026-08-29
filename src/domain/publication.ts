@@ -57,10 +57,10 @@ const reviewerTitle = (reviewer: string): string =>
 const formatDurationSeconds = (durationMs: number): string =>
   `${String(Math.round(durationMs / 100) / 10)}s`;
 
-const averageReadiness = (reports: readonly ReviewerReport[]): string => {
-  if (reports.length === 0) return "0.0";
-  const total = reports.reduce((sum, report) => sum + report.readiness, 0);
-  return (total / reports.length).toFixed(1);
+const averageReadiness = (scores: readonly number[]): string => {
+  if (scores.length === 0) return "0.0";
+  const total = scores.reduce((sum, score) => sum + score, 0);
+  return (total / scores.length).toFixed(1);
 };
 
 const promptText = (value: string): string => value.replaceAll("`", "'");
@@ -126,7 +126,6 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     )
     .filter((candidate) => !prior.has(candidate.stableIdentity))
     .sort(strongerFirst);
-
   const byLocation = new Map<string, CandidateFinding[]>();
   for (const candidate of candidates) {
     const key = `${candidate.location.path}:${String(candidate.location.line)}`;
@@ -159,22 +158,52 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     finding: candidate,
     body: `**${reviewerTitle(candidate.reviewer)} reviewer · ${candidate.severity.toUpperCase()}: ${candidate.title}**\n\nTrigger: ${candidate.trigger}\n\nEvidence: ${candidate.evidence}\n\nAction: ${candidate.proposedAction}\n\n${promptDropdown(`Fix the verified ${candidate.severity} finding from the ${reviewerTitle(candidate.reviewer)} reviewer in ${candidate.location.path} at changed line ${String(candidate.location.line)}.\n\nProblem: ${candidate.title}\nTrigger: ${candidate.trigger}\nEvidence: ${candidate.evidence}\nRequired action: ${candidate.proposedAction}\n\nMake the smallest safe change, preserve unrelated behavior, add or update a regression test that proves the defect is fixed, and run the relevant project checks. Summarize the code changed and the verification performed.`)}\n\n<!-- gauntlet:${candidate.stableIdentity} -->`,
   }));
+  const publishableLocations = new Set(
+    selected.map(
+      (candidate) =>
+        `${candidate.location.path}:${String(candidate.location.line)}`,
+    ),
+  );
+  const actionableReviewers = new Set(
+    candidates
+      .filter((candidate) =>
+        publishableLocations.has(
+          `${candidate.location.path}:${String(candidate.location.line)}`,
+        ),
+      )
+      .map((candidate) => candidate.reviewer),
+  );
   const omissions =
     input.coverageOmissions.length === 0
       ? "None"
       : input.coverageOmissions.join("; ");
-  const reviewerComments = selectedReports.map((report) => {
+  const effectiveReports = selectedReports.map((report) => ({
+    report,
+    readiness: actionableReviewers.has(report.reviewer) ? report.readiness : 5,
+  }));
+  const reviewerComments = effectiveReports.map(({ report, readiness }) => {
     const fixPrompt =
-      report.readiness < 5
-        ? `\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(report.readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}`
+      readiness < 5
+        ? `\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}`
         : "";
     return {
       reviewer: report.reviewer,
-      body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}${fixPrompt}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
+      body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}${fixPrompt}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
     };
   });
-  const summary = input.reviewSummary;
-  const overallReadiness = averageReadiness(selectedReports);
+  const summary =
+    comments.length === 0
+      ? {
+          headline: "No verified findings",
+          overview:
+            "Gauntlet completed every specialist review and challenge. No candidate passed the deterministic changed-line, challenge, deduplication, and corroboration policy, so no actionable finding remains for this head.",
+          topRisk: "No verified material risk remains.",
+          nextAction: "No review action required.",
+        }
+      : input.reviewSummary;
+  const overallReadiness = averageReadiness(
+    effectiveReports.map((report) => report.readiness),
+  );
   const body = `## Gauntlet summary\n\n**${summary.headline}**\n\n${summary.overview}\n\n**Readiness:** ${overallReadiness}/5 · **Verified findings:** ${String(comments.length)} · **Cost:** $${(input.estimatedCost / 1_000_000).toFixed(6)} · **Duration:** ${formatDurationSeconds(input.durationMs)}\n\n**Top risk:** ${summary.topRisk}\n\n**Next step:** ${summary.nextAction}\n\nCoverage omissions: ${omissions}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",

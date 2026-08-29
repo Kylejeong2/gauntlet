@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { reviewerId, usdMicros } from "../src/domain/ids.js";
-import { SailModelClient } from "../src/adapters/sail-model.js";
+import { findingId, reviewerId, usdMicros } from "../src/domain/ids.js";
+import {
+  SAIL_REQUEST_TIMEOUT_MS,
+  SailModelClient,
+} from "../src/adapters/sail-model.js";
 import {
   AllowlistedToolBroker,
   type CommandSandbox,
@@ -8,6 +11,7 @@ import {
 
 describe("Sail model contract", () => {
   it("uses DeepSeek V4 Flash through Sail's synchronous asap contract and accounts for usage", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -65,10 +69,71 @@ describe("Sail model contract", () => {
       metadata: { completion_window: "asap" },
       reasoning: { effort: "low" },
       max_output_tokens: 6000,
+      text: {
+        format: {
+          schema: {
+            properties: {
+              rationale: { maxLength: 1_000 },
+              examinedAreas: {
+                maxItems: 50,
+                items: { maxLength: 500 },
+              },
+              findings: {
+                maxItems: 3,
+                items: {
+                  properties: {
+                    id: { maxLength: 255 },
+                    evidence: { maxLength: 4_000 },
+                    proposedAction: { maxLength: 2_000 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     expect(request.background).toBeUndefined();
     expect(init.headers).toMatchObject({ Authorization: "Bearer test-key" });
     expect(new Headers(init.headers).get("Idempotency-Key")).toBeNull();
+    expect(timeout).toHaveBeenCalledWith(SAIL_REQUEST_TIMEOUT_MS);
+    timeout.mockRestore();
+  });
+
+  it("allows a shorter request timeout for bounded callers and tests", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+      const signal = init?.signal;
+      if (signal === null || signal === undefined)
+        return Promise.reject(new Error("Expected an abort signal"));
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            reject(
+              signal.reason instanceof Error
+                ? signal.reason
+                : new Error("Request aborted"),
+            );
+          },
+          { once: true },
+        );
+      });
+    });
+    const client = new SailModelClient({
+      apiKey: "test-key",
+      fetcher,
+      requestTimeoutMs: 10,
+    });
+
+    await expect(
+      client.review({
+        reviewer: reviewerId("security"),
+        label: "Security",
+        question: "Find defects.",
+        snapshot: "diff",
+        toolEvidence: [],
+      }),
+    ).rejects.toThrow("aborted due to timeout");
   });
 
   it("fails closed on a malformed model response", async () => {
@@ -95,6 +160,42 @@ describe("Sail model contract", () => {
         toolEvidence: [],
       }),
     ).rejects.toThrow("Invalid Sail reviewer response");
+  });
+
+  it("normalizes empty descriptive reviewer areas without weakening findings", async () => {
+    const client = new SailModelClient({
+      apiKey: "test-key",
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: "response-empty-area",
+            status: "completed",
+            output_text: JSON.stringify({
+              reviewer: "adversarial-testing",
+              readiness: 5,
+              rationale: "No concrete defect found.",
+              examinedAreas: [""],
+              findings: [],
+            }),
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    });
+
+    const result = await client.review({
+      reviewer: reviewerId("adversarial-testing"),
+      label: "Adversarial testing",
+      question: "Find defects.",
+      snapshot: "diff",
+      toolEvidence: [],
+    });
+
+    expect(result.report.examinedAreas).toEqual([
+      "Supplied pull-request snapshot",
+    ]);
+    expect(result.report.findings).toEqual([]);
   });
 
   it("produces a structured PR-level synthesis with usage accounting", async () => {
@@ -134,6 +235,44 @@ describe("Sail model contract", () => {
     };
     expect(request.metadata?.completion_window).toBe("asap");
     expect(request.text?.format?.name).toBe("review_summary");
+  });
+
+  it("downgrades an ungrounded confirmation that omits the changed path", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "response-challenge",
+          status: "completed",
+          output_text: JSON.stringify({
+            outcome: "confirmed",
+            reason: "The candidate appears plausible.",
+          }),
+          usage: { input_tokens: 10, output_tokens: 10 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const client = new SailModelClient({ apiKey: "test-key", fetcher });
+
+    const result = await client.challenge({
+      finding: {
+        id: findingId("race-1"),
+        reviewer: reviewerId("concurrency"),
+        location: { path: "src/worker.ts", line: 42 },
+        severity: "medium",
+        confidence: 0.8,
+        title: "Duplicate side effect",
+        trigger: "A lease expires during publication.",
+        evidence: "The worker publishes without a current claim.",
+        proposedAction: "Fence the receipt.",
+        stableIdentity: "duplicate-side-effect",
+      },
+      snapshot: "src/worker.ts changed on line 42",
+      toolEvidence: [],
+    });
+
+    expect(result.verdict.kind).toBe("inconclusive");
+    expect(result.verdict.reason).toContain("src/worker.ts");
   });
 
   it("retries a transient rate limit without changing models", async () => {

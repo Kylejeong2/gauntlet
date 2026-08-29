@@ -1,35 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { DurableReviewWorker } from "../src/application/worker.js";
-import {
-  commitSha,
-  installationId,
-  pullNumber,
-  repositoryId,
-  runId,
-  workerId,
-} from "../src/domain/ids.js";
-import type { Lease, QueuedRun } from "../src/storage/run-store.js";
+import { runId, workerId } from "../src/domain/ids.js";
+import type { WorkLease } from "../src/storage/run-store.js";
 
-const queuedRun: QueuedRun = {
+const lease: WorkLease = {
+  workKey: "run-1:snapshot",
   runId: runId("run-1"),
-  installationId: installationId(1),
-  repositoryId: repositoryId(2),
-  pullNumber: pullNumber(3),
-  owner: "Kylejeong2",
-  repository: "gauntlet",
-  baseSha: commitSha("a".repeat(40)),
-  headSha: commitSha("b".repeat(40)),
-};
-
-const lease: Lease = {
-  runId: queuedRun.runId,
+  kind: "snapshot",
   workerId: workerId("worker-1"),
   expiresAtMs: 61_000,
   attempt: 1,
+  maxAttempts: 3,
 };
 
 describe("durable review worker", () => {
-  it("claims, executes, and completes persisted work", async () => {
+  it("claims and executes one persisted phase at a time", async () => {
     const events: string[] = [];
     let claimed = false;
     const worker = new DurableReviewWorker({
@@ -37,29 +22,24 @@ describe("durable review worker", () => {
       leaseDurationMs: 60_000,
       clock: () => 1_000,
       store: {
-        claimNext: () => {
+        claimNextWork: () => {
           if (claimed) return null;
           claimed = true;
           return lease;
         },
-        getRun: () => queuedRun,
-        completeLease: () => {
-          events.push("completed");
-        },
-        failLease: () => {
-          events.push("failed");
-        },
+        heartbeatWork: () => lease,
+        retryWork: () => "retry_scheduled",
       },
-      execute: (run) => {
-        events.push(`executed:${run.runId}`);
+      execute: (work) => {
+        events.push(`executed:${work.workKey}`);
         return Promise.resolve();
       },
     });
     expect(await worker.drain()).toBe(1);
-    expect(events).toEqual(["executed:run-1", "completed"]);
+    expect(events).toEqual(["executed:run-1:snapshot"]);
   });
 
-  it("records a failed terminal state without losing the lease error", async () => {
+  it("schedules a bounded retry without losing the phase error", async () => {
     let claimed = false;
     const failures: string[] = [];
     const worker = new DurableReviewWorker({
@@ -67,17 +47,15 @@ describe("durable review worker", () => {
       leaseDurationMs: 60_000,
       clock: () => 1_000,
       store: {
-        claimNext: () => {
+        claimNextWork: () => {
           if (claimed) return null;
           claimed = true;
           return lease;
         },
-        getRun: () => queuedRun,
-        completeLease: () => {
-          throw new Error("must not complete");
-        },
-        failLease: (request) => {
+        heartbeatWork: () => lease,
+        retryWork: (request) => {
           failures.push(request.reason);
+          return "retry_scheduled";
         },
       },
       execute: () => Promise.reject(new Error("provider unavailable")),

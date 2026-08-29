@@ -1,6 +1,6 @@
 import { App, Image, Sailbox } from "@sailresearch/sdk";
 import { z } from "zod";
-import type { ReviewRunInput } from "../application/review-runner.js";
+import type { ReviewRunInput } from "../application/review-contracts.js";
 import { reviewerId, usdMicros, type ReviewerId } from "../domain/ids.js";
 
 export type SailboxCommandResult = Readonly<{
@@ -31,6 +31,8 @@ export type SailboxFactory = Readonly<{
       diskLimitGib: number;
     }>,
   ) => Promise<SailboxInstance>;
+  get: (sailboxId: string) => Promise<SailboxInstance>;
+  findByName: (name: string) => Promise<SailboxInstance | null>;
 }>;
 
 export type SailboxAuditEvent = Readonly<{
@@ -65,25 +67,43 @@ export class SailSdkFactory implements SailboxFactory {
       diskLimitGib: options.diskLimitGib,
       image: Image.devbox(),
     });
-    return {
-      id: box.sailboxId,
-      run: async (argv, runOptions) => {
-        const result = await box.run(argv, {
-          ...runOptions,
-          check: false,
-        });
-        return {
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        };
-      },
-      terminate: async () => {
-        await box.terminate();
-      },
-    };
+    return toSailboxInstance(box);
+  }
+
+  public async get(sailboxId: string): Promise<SailboxInstance> {
+    return toSailboxInstance(await Sailbox.get(sailboxId));
+  }
+
+  public async findByName(name: string): Promise<SailboxInstance | null> {
+    const matches = await Sailbox.list({
+      search: name,
+      status: "running",
+      order: "newest_created",
+      limit: 10,
+    });
+    const exact = matches.find((candidate) => candidate.name === name);
+    return exact === undefined ? null : toSailboxInstance(exact);
   }
 }
+
+const toSailboxInstance = (box: Sailbox): SailboxInstance =>
+  ({
+    id: box.sailboxId,
+    run: async (argv, runOptions) => {
+      const result = await box.run(argv, {
+        ...runOptions,
+        check: false,
+      });
+      return {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
+    },
+    terminate: async () => {
+      await box.terminate();
+    },
+  }) satisfies SailboxInstance;
 
 type EnvironmentHandle = Readonly<{
   id: string;
@@ -242,6 +262,68 @@ export class SailboxReviewEnvironment {
       );
     }
     return evidence;
+  }
+
+  public async resume(
+    input: ReviewRunInput,
+    handle: EnvironmentLookupHandle,
+  ): Promise<EnvironmentHandle> {
+    if (this.#instances.has(handle.id))
+      return { id: handle.id, estimatedCost: usdMicros(0) };
+    const instance = await this.#factory.get(handle.id);
+    const head = await checkedRun(
+      instance,
+      ["git", "rev-parse", "HEAD"],
+      "/workspace/repo",
+      this.#audit,
+    );
+    if (head.stdout.trim() !== input.headSha)
+      throw new Error(
+        "Persisted Sailbox is not checked out at the reviewed head",
+      );
+    const manifests = await checkedRun(
+      instance,
+      [
+        "git",
+        "ls-files",
+        "package.json",
+        "pnpm-lock.yaml",
+        "package-lock.json",
+        "yarn.lock",
+      ],
+      "/workspace/repo",
+      this.#audit,
+    );
+    const packageJson = manifests.stdout
+      .split("\n")
+      .some((file) => file.trim() === "package.json")
+      ? await checkedRun(
+          instance,
+          ["git", "show", "HEAD:package.json"],
+          "/workspace/repo",
+          this.#audit,
+        )
+      : undefined;
+    this.#instances.set(instance.id, {
+      instance,
+      input,
+      projectCommands: detectProjectCommands(
+        manifests.stdout,
+        packageJson?.stdout,
+      ),
+      evidenceCache: new Map(),
+    });
+    return { id: instance.id, estimatedCost: usdMicros(0) };
+  }
+
+  public async find(
+    input: ReviewRunInput,
+    name: string,
+  ): Promise<EnvironmentHandle | null> {
+    const instance = await this.#factory.findByName(name);
+    if (instance === null) return null;
+    const resumed = await this.resume(input, { id: instance.id });
+    return { ...resumed, estimatedCost: usdMicros(10_000) };
   }
 
   public async terminate(handle: EnvironmentLookupHandle): Promise<void> {

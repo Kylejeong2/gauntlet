@@ -146,16 +146,93 @@ const migrations: readonly string[] = [
     ALTER TABLE snapshot_files ADD COLUMN file_kind TEXT NOT NULL DEFAULT 'reviewable';
     CREATE UNIQUE INDEX snapshot_files_ordinal ON snapshot_files(run_id, ordinal);
   `,
+  `
+    ALTER TABLE review_runs ADD COLUMN terminal_failure_reason TEXT;
+    ALTER TABLE review_runs ADD COLUMN cancel_requested_at_ms INTEGER;
+    ALTER TABLE review_runs ADD COLUMN cancel_reason TEXT;
+
+    ALTER TABLE work_items ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;
+    ALTER TABLE work_items ADD COLUMN next_attempt_at_ms INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE work_items ADD COLUMN last_error TEXT;
+    ALTER TABLE work_items ADD COLUMN failed_at_ms INTEGER;
+
+    ALTER TABLE reviewer_reports ADD COLUMN cost_micros INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE challenge_verdicts ADD COLUMN cost_micros INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE sailboxes ADD COLUMN sailbox_name TEXT;
+    ALTER TABLE sailboxes ADD COLUMN estimated_cost_micros INTEGER NOT NULL DEFAULT 0;
+
+    CREATE TABLE review_plans (
+      run_id TEXT PRIMARY KEY REFERENCES review_runs(run_id) ON DELETE CASCADE,
+      selected_reviewers_json TEXT NOT NULL,
+      prior_stable_identities_json TEXT NOT NULL,
+      created_at_ms INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE review_summaries (
+      run_id TEXT PRIMARY KEY REFERENCES review_runs(run_id) ON DELETE CASCADE,
+      summary_json TEXT NOT NULL,
+      cost_micros INTEGER NOT NULL,
+      created_at_ms INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE INDEX work_items_retryable
+      ON work_items(completed_at_ms, failed_at_ms, next_attempt_at_ms, lease_expires_at_ms, created_at_ms);
+
+    INSERT OR IGNORE INTO work_items
+      (work_key, run_id, kind, created_at_ms, next_attempt_at_ms)
+    SELECT
+      run_id || ':' ||
+        CASE state
+          WHEN 'accepted' THEN 'snapshot'
+          WHEN 'snapshotting' THEN 'snapshot'
+          WHEN 'planning' THEN 'plan'
+          WHEN 'preparing_sailbox' THEN 'prepare_sailbox'
+          WHEN 'reviewing' THEN 'review'
+          WHEN 'challenging' THEN 'challenge'
+          WHEN 'reducing' THEN 'reduce'
+          WHEN 'publishing' THEN 'publish'
+          WHEN 'cleaning_up' THEN 'cleanup'
+        END,
+      run_id,
+      CASE state
+        WHEN 'accepted' THEN 'snapshot'
+        WHEN 'snapshotting' THEN 'snapshot'
+        WHEN 'planning' THEN 'plan'
+        WHEN 'preparing_sailbox' THEN 'prepare_sailbox'
+        WHEN 'reviewing' THEN 'review'
+        WHEN 'challenging' THEN 'challenge'
+        WHEN 'reducing' THEN 'reduce'
+        WHEN 'publishing' THEN 'publish'
+        WHEN 'cleaning_up' THEN 'cleanup'
+      END,
+      created_at_ms,
+      created_at_ms
+    FROM review_runs
+    WHERE state NOT IN ('completed', 'failed');
+  `,
+  `
+    ALTER TABLE publications ADD COLUMN claim_worker TEXT;
+    ALTER TABLE publications ADD COLUMN claim_attempt INTEGER;
+  `,
 ];
 
-export const migrate = (database: Database.Database): void => {
+export const migrate = (
+  database: Database.Database,
+  targetVersion = migrations.length,
+): void => {
   database.pragma("foreign_keys = ON");
   database.pragma("journal_mode = WAL");
   database.pragma("busy_timeout = 5000");
   const currentVersion = database.pragma("user_version", { simple: true });
   if (typeof currentVersion !== "number" || !Number.isInteger(currentVersion))
     throw new Error("Invalid SQLite user_version");
-  for (let index = currentVersion; index < migrations.length; index += 1) {
+  if (
+    !Number.isInteger(targetVersion) ||
+    targetVersion < currentVersion ||
+    targetVersion > migrations.length
+  )
+    throw new Error("Invalid migration target version");
+  for (let index = currentVersion; index < targetVersion; index += 1) {
     const sql = migrations[index];
     if (sql === undefined)
       throw new Error(`Missing migration ${String(index + 1)}`);

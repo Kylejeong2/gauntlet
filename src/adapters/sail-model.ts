@@ -17,6 +17,7 @@ export const SAIL_MODEL = "deepseek/deepseek-v4-flash-0731";
 export const SAIL_API_URL = "https://api.sailresearch.com/v1/responses";
 export const SAIL_INPUT_USD_PER_MILLION = 0.09;
 export const SAIL_OUTPUT_USD_PER_MILLION = 0.18;
+export const SAIL_REQUEST_TIMEOUT_MS = 600_000;
 
 const responseEnvelopeSchema = z.looseObject({
   id: z.string().min(1),
@@ -93,6 +94,7 @@ export class SailModelClient {
   readonly #fetcher: typeof fetch;
   readonly #apiUrl: string;
   readonly #retryDelaysMs: readonly number[];
+  readonly #requestTimeoutMs: number;
   readonly #audit: (event: SailModelAuditEvent) => void;
 
   public constructor(
@@ -101,6 +103,7 @@ export class SailModelClient {
       fetcher?: typeof fetch;
       apiUrl?: string;
       retryDelaysMs?: readonly number[];
+      requestTimeoutMs?: number;
       audit?: (event: SailModelAuditEvent) => void;
     }>,
   ) {
@@ -112,6 +115,13 @@ export class SailModelClient {
     this.#retryDelaysMs = options.retryDelaysMs ?? [
       15_000, 30_000, 60_000, 120_000, 240_000,
     ];
+    this.#requestTimeoutMs =
+      options.requestTimeoutMs ?? SAIL_REQUEST_TIMEOUT_MS;
+    if (
+      !Number.isSafeInteger(this.#requestTimeoutMs) ||
+      this.#requestTimeoutMs <= 0
+    )
+      throw new Error("requestTimeoutMs must be a positive integer");
     this.#audit =
       options.audit ??
       ((event) => {
@@ -132,6 +142,9 @@ export class SailModelClient {
         request.question,
         "Inspect only the supplied immutable pull-request snapshot.",
         "Return a 1-to-5 readiness score and at most three concrete defects.",
+        "A report with no concrete finding must score readiness 5. Every score below 5 must include at least one finding whose exact changed line proves the gap.",
+        "Do not lower readiness for missing, failed, or unavailable sandbox evidence unless a changed line demonstrably caused that failure.",
+        "Do not return two findings with the same stableIdentity; combine semantic duplicates into the strongest supported finding.",
         "Keep the rationale under 120 words and every finding field under 80 words.",
         "Return only the JSON object required by the response schema.",
         "Do not report style preferences, praise, or speculative risks.",
@@ -146,7 +159,7 @@ export class SailModelClient {
       { operation: "review", correlationId: request.reviewer },
     );
     const parsed = reviewerReportSchema.safeParse(
-      parseJsonObject(result.value),
+      normalizeReviewerDescription(parseJsonObject(result.value)),
     );
     if (!parsed.success)
       throw new Error(
@@ -177,6 +190,7 @@ export class SailModelClient {
         "You are an independent verification reviewer.",
         "Try to disprove the candidate finding using only the supplied snapshot and evidence.",
         "Confirm only when the trigger is reachable and the evidence supports the claimed impact.",
+        "A confirmed reason must name the exact changed file path and explain how its supplied evidence proves the reachable trigger. Otherwise return rejected or inconclusive.",
         "Use rejected for false positives and inconclusive when proof is insufficient.",
         `Candidate finding:\n${JSON.stringify(request.finding)}`,
         `Snapshot:\n${request.snapshot}`,
@@ -192,10 +206,22 @@ export class SailModelClient {
       parseJsonObject(result.value),
     );
     if (!output.success) throw new Error("Invalid Sail challenge response");
+    const groundedOutcome =
+      output.data.outcome === "confirmed" &&
+      !output.data.reason.includes(request.finding.location.path)
+        ? "inconclusive"
+        : output.data.outcome;
+    const reason =
+      groundedOutcome === output.data.outcome
+        ? output.data.reason
+        : `Confirmation did not cite the exact changed path ${request.finding.location.path}. ${output.data.reason}`.slice(
+            0,
+            2_000,
+          );
     const verdict = challengeVerdictSchema.parse({
-      kind: output.data.outcome,
+      kind: groundedOutcome,
       findingId: findingId(request.finding.id),
-      reason: output.data.reason,
+      reason,
     });
     return { verdict, cost: result.cost, responseId: result.responseId };
   }
@@ -279,7 +305,7 @@ export class SailModelClient {
           "Content-Type": "application/json",
         },
         body,
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });
       rawBody = await response.text();
       responseStatus = response.status;
@@ -376,25 +402,45 @@ const parseJsonObject = (value: string): unknown => {
   }
 };
 
+const normalizeReviewerDescription = (value: unknown): unknown => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("examinedAreas" in value) ||
+    !Array.isArray(value.examinedAreas)
+  )
+    return value;
+  const examinedAreas = value.examinedAreas.filter(
+    (area) => typeof area !== "string" || area.trim().length > 0,
+  );
+  return {
+    ...value,
+    examinedAreas:
+      examinedAreas.length === 0
+        ? ["Supplied pull-request snapshot"]
+        : examinedAreas,
+  };
+};
+
 const findingProperties = (reviewer: ReviewerId) => ({
-  id: { type: "string", minLength: 1 },
+  id: { type: "string", minLength: 1, maxLength: 255 },
   reviewer: { type: "string", const: reviewer },
   location: {
     type: "object",
     additionalProperties: false,
     required: ["path", "line"],
     properties: {
-      path: { type: "string", minLength: 1 },
+      path: { type: "string", minLength: 1, maxLength: 1024 },
       line: { type: "integer", minimum: 1 },
     },
   },
   severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
   confidence: { type: "number", minimum: 0, maximum: 1 },
-  title: { type: "string", minLength: 1 },
-  trigger: { type: "string", minLength: 1 },
-  evidence: { type: "string", minLength: 1 },
-  proposedAction: { type: "string", minLength: 1 },
-  stableIdentity: { type: "string", minLength: 1 },
+  title: { type: "string", minLength: 1, maxLength: 160 },
+  trigger: { type: "string", minLength: 1, maxLength: 2_000 },
+  evidence: { type: "string", minLength: 1, maxLength: 4_000 },
+  proposedAction: { type: "string", minLength: 1, maxLength: 2_000 },
+  stableIdentity: { type: "string", minLength: 1, maxLength: 512 },
 });
 
 const reviewerReportJsonSchema = (reviewer: ReviewerId) => {
@@ -412,8 +458,13 @@ const reviewerReportJsonSchema = (reviewer: ReviewerId) => {
     properties: {
       reviewer: { type: "string", const: reviewer },
       readiness: { type: "integer", minimum: 1, maximum: 5 },
-      rationale: { type: "string", minLength: 1 },
-      examinedAreas: { type: "array", minItems: 1, items: { type: "string" } },
+      rationale: { type: "string", minLength: 1, maxLength: 1_000 },
+      examinedAreas: {
+        type: "array",
+        minItems: 1,
+        maxItems: 50,
+        items: { type: "string", minLength: 1, maxLength: 500 },
+      },
       findings: {
         type: "array",
         maxItems: 3,
@@ -437,7 +488,7 @@ const challengeJsonSchema = {
       type: "string",
       enum: ["confirmed", "rejected", "inconclusive"],
     },
-    reason: { type: "string", minLength: 1 },
+    reason: { type: "string", minLength: 1, maxLength: 2_000 },
   },
 };
 

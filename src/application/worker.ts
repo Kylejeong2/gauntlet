@@ -1,9 +1,9 @@
-import type { RunId, WorkerId } from "../domain/ids.js";
-import type { Lease, QueuedRun, SqliteRunStore } from "../storage/run-store.js";
+import type { WorkerId } from "../domain/ids.js";
+import type { SqliteRunStore, WorkLease } from "../storage/run-store.js";
 
 type WorkerStore = Pick<
   SqliteRunStore,
-  "claimNext" | "getRun" | "completeLease" | "failLease"
+  "claimNextWork" | "heartbeatWork" | "retryWork"
 >;
 
 export class DurableReviewWorker {
@@ -11,7 +11,7 @@ export class DurableReviewWorker {
   readonly #leaseDurationMs: number;
   readonly #clock: () => number;
   readonly #store: WorkerStore;
-  readonly #execute: (run: QueuedRun) => Promise<void>;
+  readonly #execute: (lease: WorkLease) => Promise<void>;
   #activeDrain: Promise<number> | undefined;
 
   public constructor(
@@ -20,7 +20,7 @@ export class DurableReviewWorker {
       leaseDurationMs: number;
       clock?: () => number;
       store: WorkerStore;
-      execute: (run: QueuedRun) => Promise<void>;
+      execute: (lease: WorkLease) => Promise<void>;
     }>,
   ) {
     this.#workerId = options.workerId;
@@ -30,21 +30,21 @@ export class DurableReviewWorker {
     this.#execute = options.execute;
   }
 
-  public drain(maxRuns = 10): Promise<number> {
+  public drain(maxWorkItems = 50): Promise<number> {
     if (this.#activeDrain !== undefined) return this.#activeDrain;
-    const drain = this.#drain(maxRuns).finally(() => {
+    const drain = this.#drain(maxWorkItems).finally(() => {
       if (this.#activeDrain === drain) this.#activeDrain = undefined;
     });
     this.#activeDrain = drain;
     return drain;
   }
 
-  async #drain(maxRuns: number): Promise<number> {
-    if (!Number.isInteger(maxRuns) || maxRuns < 1)
-      throw new Error("maxRuns must be a positive integer");
+  async #drain(maxWorkItems: number): Promise<number> {
+    if (!Number.isInteger(maxWorkItems) || maxWorkItems < 1)
+      throw new Error("maxWorkItems must be a positive integer");
     let processed = 0;
-    while (processed < maxRuns) {
-      const lease = this.#store.claimNext({
+    while (processed < maxWorkItems) {
+      const lease = this.#store.claimNextWork({
         workerId: this.#workerId,
         nowMs: this.#clock(),
         leaseDurationMs: this.#leaseDurationMs,
@@ -56,27 +56,44 @@ export class DurableReviewWorker {
     return processed;
   }
 
-  async #processLease(lease: Lease): Promise<void> {
+  async #processLease(lease: WorkLease): Promise<void> {
+    let heartbeatError: unknown;
+    const heartbeat = setInterval(
+      () => {
+        try {
+          this.#store.heartbeatWork({
+            lease,
+            nowMs: this.#clock(),
+            leaseDurationMs: this.#leaseDurationMs,
+          });
+        } catch (error: unknown) {
+          heartbeatError = error;
+        }
+      },
+      Math.max(1, Math.floor(this.#leaseDurationMs / 3)),
+    );
+    heartbeat.unref();
     try {
-      const run = this.#store.getRun(lease.runId);
-      await this.#execute(run);
-      this.#store.completeLease({
-        runId: lease.runId,
-        workerId: this.#workerId,
-        nowMs: this.#clock(),
-      });
+      await this.#execute(lease);
+      if (heartbeatError !== undefined) throw asError(heartbeatError);
     } catch (error: unknown) {
-      this.#store.failLease({
-        runId: lease.runId,
-        workerId: this.#workerId,
+      this.#store.retryWork({
+        lease,
         nowMs: this.#clock(),
-        reason: errorMessage(error, lease.runId),
+        retryAtMs: this.#clock() + retryDelayMs(lease.attempt),
+        reason: errorMessage(error),
       });
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 }
 
-const errorMessage = (error: unknown, targetRunId: RunId): string =>
-  error instanceof Error
-    ? error.message
-    : `Unknown failure while processing ${targetRunId}`;
+const retryDelayMs = (attempt: number): number =>
+  Math.min(15 * 60_000, 15_000 * 2 ** Math.max(0, attempt - 1));
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Unknown durable work failure";
+
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(errorMessage(error));

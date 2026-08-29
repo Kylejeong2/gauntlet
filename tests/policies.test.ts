@@ -258,7 +258,74 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
         "<summary>Prompt to fix</summary>",
       );
       expect(result.body).toContain("**Readiness:** 5.0/5");
+      expect(result.body).toContain("**No verified findings**");
+      expect(result.body).toContain(
+        "**Next step:** No review action required.",
+      );
+      expect(result.body).not.toContain("Ready to merge");
+      expect(result.body).not.toContain("unverified blocker");
+      expect(result.body).not.toContain("Fix the uncorroborated claim");
       expect(result.body).not.toContain("<summary>Prompt to fix</summary>");
+    }
+  });
+
+  it("does not depress readiness or offer fixes without a publishable finding", () => {
+    const uncorroborated = finding({
+      reviewer: reviewerId("documentation"),
+      location: { path: "README.md", line: 1 },
+    });
+    const result = reducePublication({
+      runId: runId("run-no-actionable-finding"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [
+        reviewerId("api-compatibility"),
+        reviewerId("documentation"),
+      ],
+      reports: [
+        {
+          reviewer: reviewerId("api-compatibility"),
+          readiness: 4,
+          rationale: "No compatibility break was found.",
+          examinedAreas: ["public API"],
+          findings: [],
+        },
+        {
+          ...report(uncorroborated),
+          readiness: 1,
+        },
+      ],
+      challenges: [
+        {
+          kind: "confirmed",
+          findingId: uncorroborated.id,
+          reason: "The claim is supported but has no corroborating reviewer.",
+        },
+      ],
+      changedLines: [{ path: "README.md", lines: [1] }],
+      priorStableIdentities: [],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(1_000),
+      durationMs: 1_000,
+      reviewSummary: {
+        ...reviewSummary,
+        headline: "An unverified blocker needs fixing",
+        topRisk: "An uncorroborated claim could be material.",
+        nextAction: "Fix the uncorroborated claim.",
+      },
+    });
+
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish") {
+      expect(result.body).toContain("**Readiness:** 5.0/5");
+      expect(result.body).toContain("**No verified findings**");
+      expect(result.body).not.toContain("unverified blocker");
+      expect(result.body).not.toContain("Fix the uncorroborated claim");
+      expect(result.comments).toHaveLength(0);
+      expect(result.reviewerComments).toHaveLength(2);
+      for (const comment of result.reviewerComments) {
+        expect(comment.body).toContain("reviewer: 5/5");
+        expect(comment.body).not.toContain("Prompt to fix");
+      }
     }
   });
 
