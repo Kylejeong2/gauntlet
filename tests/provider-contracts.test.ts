@@ -69,6 +69,28 @@ describe("Sail model contract", () => {
       metadata: { completion_window: "asap" },
       reasoning: { effort: "low" },
       max_output_tokens: 6000,
+      text: {
+        format: {
+          schema: {
+            properties: {
+              rationale: { maxLength: 1_000 },
+              examinedAreas: {
+                maxItems: 50,
+                items: { maxLength: 500 },
+              },
+              findings: {
+                maxItems: 3,
+                items: {
+                  properties: {
+                    evidence: { maxLength: 4_000 },
+                    proposedAction: { maxLength: 2_000 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     expect(request.background).toBeUndefined();
     expect(init.headers).toMatchObject({ Authorization: "Bearer test-key" });

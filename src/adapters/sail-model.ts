@@ -394,17 +394,17 @@ const findingProperties = (reviewer: ReviewerId) => ({
     additionalProperties: false,
     required: ["path", "line"],
     properties: {
-      path: { type: "string", minLength: 1 },
+      path: { type: "string", minLength: 1, maxLength: 1024 },
       line: { type: "integer", minimum: 1 },
     },
   },
   severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
   confidence: { type: "number", minimum: 0, maximum: 1 },
-  title: { type: "string", minLength: 1 },
-  trigger: { type: "string", minLength: 1 },
-  evidence: { type: "string", minLength: 1 },
-  proposedAction: { type: "string", minLength: 1 },
-  stableIdentity: { type: "string", minLength: 1 },
+  title: { type: "string", minLength: 1, maxLength: 160 },
+  trigger: { type: "string", minLength: 1, maxLength: 2_000 },
+  evidence: { type: "string", minLength: 1, maxLength: 4_000 },
+  proposedAction: { type: "string", minLength: 1, maxLength: 2_000 },
+  stableIdentity: { type: "string", minLength: 1, maxLength: 512 },
 });
 
 const reviewerReportJsonSchema = (reviewer: ReviewerId) => {
@@ -422,8 +422,13 @@ const reviewerReportJsonSchema = (reviewer: ReviewerId) => {
     properties: {
       reviewer: { type: "string", const: reviewer },
       readiness: { type: "integer", minimum: 1, maximum: 5 },
-      rationale: { type: "string", minLength: 1 },
-      examinedAreas: { type: "array", minItems: 1, items: { type: "string" } },
+      rationale: { type: "string", minLength: 1, maxLength: 1_000 },
+      examinedAreas: {
+        type: "array",
+        minItems: 1,
+        maxItems: 50,
+        items: { type: "string", minLength: 1, maxLength: 500 },
+      },
       findings: {
         type: "array",
         maxItems: 3,
@@ -447,7 +452,7 @@ const challengeJsonSchema = {
       type: "string",
       enum: ["confirmed", "rejected", "inconclusive"],
     },
-    reason: { type: "string", minLength: 1 },
+    reason: { type: "string", minLength: 1, maxLength: 2_000 },
   },
 };
 
