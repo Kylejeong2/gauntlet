@@ -57,10 +57,10 @@ const reviewerTitle = (reviewer: string): string =>
 const formatDurationSeconds = (durationMs: number): string =>
   `${String(Math.round(durationMs / 100) / 10)}s`;
 
-const averageReadiness = (reports: readonly ReviewerReport[]): string => {
-  if (reports.length === 0) return "0.0";
-  const total = reports.reduce((sum, report) => sum + report.readiness, 0);
-  return (total / reports.length).toFixed(1);
+const averageReadiness = (scores: readonly number[]): string => {
+  if (scores.length === 0) return "0.0";
+  const total = scores.reduce((sum, score) => sum + score, 0);
+  return (total / scores.length).toFixed(1);
 };
 
 const promptText = (value: string): string => value.replaceAll("`", "'");
@@ -126,6 +126,9 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     )
     .filter((candidate) => !prior.has(candidate.stableIdentity))
     .sort(strongerFirst);
+  const actionableReviewers = new Set(
+    candidates.map((candidate) => candidate.reviewer),
+  );
 
   const byLocation = new Map<string, CandidateFinding[]>();
   for (const candidate of candidates) {
@@ -163,18 +166,24 @@ export const reducePublication = (input: PublicationInput): PublicationPlan => {
     input.coverageOmissions.length === 0
       ? "None"
       : input.coverageOmissions.join("; ");
-  const reviewerComments = selectedReports.map((report) => {
+  const effectiveReports = selectedReports.map((report) => ({
+    report,
+    readiness: actionableReviewers.has(report.reviewer) ? report.readiness : 5,
+  }));
+  const reviewerComments = effectiveReports.map(({ report, readiness }) => {
     const fixPrompt =
-      report.readiness < 5
-        ? `\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(report.readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}`
+      readiness < 5
+        ? `\n\n${promptDropdown(`Act as the implementer responding to the ${reviewerTitle(report.reviewer)} review of this pull request.\n\nReadiness: ${String(readiness)}/5\nAssessment: ${report.rationale}\nExamined areas: ${report.examinedAreas.join(", ")}\n\nAddress every concrete concern supported by the changed code. Preserve behavior the reviewer found correct, avoid speculative refactors, add or update focused tests for each fix, and run the relevant project checks. Summarize what changed and what remains, if anything.`)}`
         : "";
     return {
       reviewer: report.reviewer,
-      body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(report.readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}${fixPrompt}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
+      body: `## ${reviewerTitle(report.reviewer)} reviewer: ${String(readiness)}/5\n\n${report.rationale}\n\nExamined: ${report.examinedAreas.join(", ")}${fixPrompt}\n\n<!-- gauntlet-reviewer:${input.runId}:${report.reviewer} -->`,
     };
   });
   const summary = input.reviewSummary;
-  const overallReadiness = averageReadiness(selectedReports);
+  const overallReadiness = averageReadiness(
+    effectiveReports.map((report) => report.readiness),
+  );
   const body = `## Gauntlet summary\n\n**${summary.headline}**\n\n${summary.overview}\n\n**Readiness:** ${overallReadiness}/5 · **Verified findings:** ${String(comments.length)} · **Cost:** $${(input.estimatedCost / 1_000_000).toFixed(6)} · **Duration:** ${formatDurationSeconds(input.durationMs)}\n\n**Top risk:** ${summary.topRisk}\n\n**Next step:** ${summary.nextAction}\n\nCoverage omissions: ${omissions}\n\n<!-- gauntlet-run:${input.runId} -->`;
   return {
     kind: "publish",

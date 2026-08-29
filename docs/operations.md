@@ -16,7 +16,7 @@ Stop the process with a normal termination signal. Do not delete a live SQLite d
 6. The Sailbox terminates after reviewer evidence; a retry reattaches an active box or creates a new attempt without repeating stored reports.
 7. Candidate challenges run serially and each verdict is checkpointed.
 8. A final structured synthesis call produces one headline, a 30-to-70-word overview, one top risk, and one next action.
-9. Pure policy creates one publication plan with copyable fix prompts for specialist reviews below 5/5 and every verified finding.
+9. Pure policy creates one publication plan. Only specialists with challenge-confirmed, changed-line findings can score below 5/5 or receive a copyable fix prompt.
 10. GitHub adds or replaces the marked one-line summary in the PR description, then returns one review ID per specialist and one final summary review ID.
 11. Cleanup reconciles any active Sailbox, settles checkpointed cost, and marks the run complete.
 
@@ -36,7 +36,7 @@ A human can add `@gauntlet review` as a new pull request comment. The `issue_com
 
 Stable identities embedded as `<!-- gauntlet:identity -->` are read from existing review comments. The next head suppresses an equivalent finding instead of repeating it. Reviewer comments carry `<!-- gauntlet-reviewer:run-id:reviewer-id -->` markers so a retry skips specialist comments already posted.
 
-Run markers embedded as `<!-- gauntlet-run:run-id -->` reconcile publication after a crash. Publication intent and its body digest are stored before submission; a recovered lease checks existing reviews and reuses the matching GitHub review ID. Sailbox creation uses the same pattern with a deterministic name and persisted lifecycle receipt.
+Run markers embedded as `<!-- gauntlet-run:run-id -->` reconcile publication after a crash. Publication intent and its body digest are stored before submission, and the intent is claimed by the current work-lease owner. Immediately before the GitHub side effect, the worker renews that lease for the bounded publication window. Only the matching worker and attempt can record the returned review ID. A recovered lease checks existing reviews and reuses the matching GitHub review ID. Sailbox creation uses the same pattern with a deterministic name and persisted lifecycle receipt.
 
 ## Incident checklist
 

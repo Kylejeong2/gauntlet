@@ -35,7 +35,7 @@ describe("SQLite RunStore", () => {
     migrate(database);
     expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(database.pragma("journal_mode", { simple: true })).toBe("memory");
-    expect(database.pragma("user_version", { simple: true })).toBe(4);
+    expect(database.pragma("user_version", { simple: true })).toBe(5);
   });
 
   it("backfills phase work when upgrading an in-flight version-three run", () => {
@@ -97,6 +97,52 @@ describe("SQLite RunStore", () => {
       runId: runId("run-aaaaaaa"),
     });
     expect(store.countRuns()).toBe(1);
+  });
+
+  it("fences publication receipts with the current durable work claim", () => {
+    store.acceptRun(request());
+    const first = store.claimNextWork({
+      workerId: workerId("publisher-a"),
+      nowMs: 1_000,
+      leaseDurationMs: 100,
+    });
+    if (first === null) throw new Error("Expected first publication claim");
+    store.beginPublication({
+      lease: first,
+      runId: first.runId,
+      key: `${first.runId}:github-review`,
+      bodyDigest: "digest-a",
+      createdAtMs: 1_050,
+    });
+    const second = store.claimNextWork({
+      workerId: workerId("publisher-b"),
+      nowMs: 1_101,
+      leaseDurationMs: 100,
+    });
+    if (second === null) throw new Error("Expected replacement claim");
+    store.beginPublication({
+      lease: second,
+      runId: second.runId,
+      key: `${second.runId}:github-review`,
+      bodyDigest: "digest-a",
+      createdAtMs: 1_110,
+    });
+
+    expect(() => {
+      store.recordPublicationSubmitted({
+        lease: first,
+        runId: first.runId,
+        reviewId: 41,
+        submittedAtMs: 1_120,
+      });
+    }).toThrow("Publication receipt conflict");
+    store.recordPublicationSubmitted({
+      lease: second,
+      runId: second.runId,
+      reviewId: 42,
+      submittedAtMs: 1_121,
+    });
+    expect(store.getPublication(second.runId)?.reviewId).toBe(42);
   });
 
   it("AC-10 creates a distinct run for a new head", () => {

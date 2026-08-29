@@ -228,13 +228,21 @@ const githubForRun = async (
 };
 
 type InstallationOctokit = Awaited<ReturnType<Probot["auth"]>>;
+const GITHUB_REQUEST_TIMEOUT_MS = 30_000;
+
+const withGitHubRequestTimeout = <T extends Readonly<Record<string, unknown>>>(
+  input: T,
+): T & Readonly<{ request: Readonly<{ timeout: number }> }> => ({
+  ...input,
+  request: { timeout: GITHUB_REQUEST_TIMEOUT_MS },
+});
 
 const makePullRequestApi = (octokit: InstallationOctokit): PullRequestApi => {
   const pulls = octokit.rest.pulls;
   const repos = octokit.rest.repos;
   return {
     getPull: async (input) => {
-      const response = await pulls.get(input);
+      const response = await pulls.get(withGitHubRequestTimeout(input));
       return {
         data: {
           head: { sha: response.data.head.sha },
@@ -247,11 +255,13 @@ const makePullRequestApi = (octokit: InstallationOctokit): PullRequestApi => {
       };
     },
     updatePull: async (input) => {
-      await pulls.update(input);
+      await pulls.update(withGitHubRequestTimeout(input));
       return { data: {} };
     },
     compareCommits: async (input) => {
-      const response = await repos.compareCommitsWithBasehead(input);
+      const response = await repos.compareCommitsWithBasehead(
+        withGitHubRequestTimeout(input),
+      );
       return {
         data: {
           base_commit: { sha: response.data.base_commit.sha },
@@ -269,13 +279,15 @@ const makePullRequestApi = (octokit: InstallationOctokit): PullRequestApi => {
       };
     },
     listReviewComments: async (input) => {
-      const response = await pulls.listReviewComments(input);
+      const response = await pulls.listReviewComments(
+        withGitHubRequestTimeout(input),
+      );
       return {
         data: response.data.map((comment) => ({ body: comment.body })),
       };
     },
     listReviews: async (input) => {
-      const response = await pulls.listReviews(input);
+      const response = await pulls.listReviews(withGitHubRequestTimeout(input));
       return {
         data: response.data.map((review) => ({
           id: review.id,
@@ -287,6 +299,7 @@ const makePullRequestApi = (octokit: InstallationOctokit): PullRequestApi => {
       const response = await pulls.createReview({
         ...input,
         comments: input.comments.map((comment) => ({ ...comment })),
+        request: { timeout: GITHUB_REQUEST_TIMEOUT_MS },
       });
       return { data: { id: response.data.id } };
     },

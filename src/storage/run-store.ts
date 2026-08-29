@@ -719,27 +719,67 @@ export class SqliteRunStore {
 
   public beginPublication(
     request: Readonly<{
+      lease: WorkLease;
       runId: RunId;
       key: string;
       bodyDigest: string;
       createdAtMs: number;
     }>,
   ): void {
-    this.#database
-      .prepare(
-        `INSERT INTO publications
-           (publication_key, run_id, body_digest, created_at_ms)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(publication_key) DO NOTHING`,
+    this.#database.transaction(() => {
+      this.assertWorkLease({
+        lease: request.lease,
+        nowMs: request.createdAtMs,
+      });
+      this.#database
+        .prepare(
+          `INSERT INTO publications
+             (publication_key, run_id, body_digest, claim_worker,
+              claim_attempt, created_at_ms)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(publication_key) DO UPDATE SET
+             claim_worker = excluded.claim_worker,
+             claim_attempt = excluded.claim_attempt
+           WHERE publications.github_review_id IS NULL
+             AND publications.body_digest = excluded.body_digest`,
+        )
+        .run(
+          request.key,
+          request.runId,
+          request.bodyDigest,
+          request.lease.workerId,
+          request.lease.attempt,
+          request.createdAtMs,
+        );
+      const stored = z
+        .object({
+          body_digest: z.string(),
+          github_review_id: z.number().int().positive().nullable(),
+          claim_worker: z.string().nullable(),
+          claim_attempt: z.number().int().positive().nullable(),
+        })
+        .parse(
+          this.#database
+            .prepare(
+              `SELECT body_digest, github_review_id, claim_worker, claim_attempt
+               FROM publications WHERE run_id = ?`,
+            )
+            .get(request.runId),
+        );
+      if (stored.body_digest !== request.bodyDigest)
+        throw new Error("Publication intent conflict");
+      if (
+        stored.github_review_id === null &&
+        (stored.claim_worker !== request.lease.workerId ||
+          stored.claim_attempt !== request.lease.attempt)
       )
-      .run(request.key, request.runId, request.bodyDigest, request.createdAtMs);
-    const stored = this.getPublication(request.runId);
-    if (stored?.bodyDigest !== request.bodyDigest)
-      throw new Error("Publication intent conflict");
+        throw new Error("Publication claim conflict");
+    })();
   }
 
   public recordPublicationSubmitted(
     request: Readonly<{
+      lease: WorkLease;
       runId: RunId;
       reviewId: number;
       submittedAtMs: number;
@@ -750,6 +790,7 @@ export class SqliteRunStore {
         `UPDATE publications
          SET github_review_id = ?, submitted_at_ms = ?, submit_result_json = ?
          WHERE run_id = ?
+           AND claim_worker = ? AND claim_attempt = ?
            AND (github_review_id IS NULL OR github_review_id = ?)`,
       )
       .run(
@@ -757,6 +798,8 @@ export class SqliteRunStore {
         request.submittedAtMs,
         JSON.stringify({ reviewId: request.reviewId }),
         request.runId,
+        request.lease.workerId,
+        request.lease.attempt,
         request.reviewId,
       );
     if (changed.changes !== 1) throw new Error("Publication receipt conflict");

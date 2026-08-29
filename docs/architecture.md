@@ -133,7 +133,7 @@ Every transition and its follow-up work item commit in one SQLite transaction. A
 
 Reviewer reports and their findings commit together. Challenge verdicts and final synthesis are put-once checkpoints: an equal retry reuses the stored value and a conflicting retry fails closed. A process restart can therefore repeat at most the currently uncheckpointed external request rather than the complete review.
 
-Sailbox creation writes a deterministic-name intent before contacting Sail. Recovery searches that exact name before creating another box, can reattach by persisted ID, verifies the checked-out head, and records termination. GitHub publication writes a body digest before submission and searches the stable run marker before retrying. These reconciliation paths close the two external side-effect windows that cannot be covered by a local transaction.
+Sailbox creation writes a deterministic-name intent before contacting Sail. Recovery searches that exact name before creating another box, can reattach by persisted ID, verifies the checked-out head, and records termination. GitHub publication writes a body digest and the current worker-attempt claim before submission, renews the work lease for a bounded publication window, and searches the stable run marker before retrying. A compare-and-set receipt update rejects a publisher whose claim was superseded. These reconciliation paths close the two external side-effect windows that cannot be covered by a local transaction.
 
 ## Reviewer organization
 
@@ -247,7 +247,7 @@ The planner does not start a partial organization. If the full worst-case plan c
 
 `reducePublication` performs these deterministic checks:
 
-1. Require one valid score for every selected reviewer.
+1. Require one valid score for every selected reviewer, but treat it as 5/5 unless that reviewer has a challenge-confirmed finding on a changed line.
 2. Keep only confirmed findings.
 3. Validate every path and right-side line against the immutable snapshot.
 4. Group semantic duplicates and retain the finding with stronger evidence.
@@ -256,7 +256,7 @@ The planner does not start a partial organization. If the full worst-case plan c
 7. Keep the first five findings.
 8. Attribute each inline finding to its originating specialist.
 9. Render one COMMENT review per specialist, followed by a compact final review containing a short synthesis, one-decimal arithmetic mean, one top risk, one next action, coverage omissions, cost, duration, and verified inline findings.
-10. Add a collapsed copyable `Prompt to fix` to specialist comments scored below 5/5 and every verified inline finding. The final summary never contains a fix prompt.
+10. Add a collapsed copyable `Prompt to fix` to specialist comments with an actionable score below 5/5 and every verified inline finding. The final summary never contains a fix prompt.
 11. Add or replace one hidden-marker Gauntlet note in the pull request description. Preserve all author-written content and collapse the generated headline to one line.
 
 Each inline body includes a hidden stable identity. A synchronize run can reconcile earlier Gauntlet feedback without trusting stale line numbers.
@@ -289,7 +289,7 @@ The domain imports no GitHub, OpenAI, Sail, Sailbox, SQLite, or logging SDK.
 | `findings` and `challenge_verdicts` | Candidate lineage and terminal challenge outcome. |
 | `budget_reservations` | Reserved and settled microdollar amounts by work item. |
 | `sailboxes` | Sailbox ID, status, creation receipt, and termination receipt. |
-| `publications` | Stable publication key, pending GitHub review ID, body digest, and submit result. |
+| `publications` | Stable publication key, body digest, current worker-attempt claim, GitHub review ID, and submit result. |
 | `run_events` | Append-only redacted audit facts for state transitions and important decisions. |
 
 SQLite uses WAL mode, foreign keys, a busy timeout, and explicit migrations. Normalized tables remain authoritative. `run_events` is an audit record, not an event-sourced state authority.

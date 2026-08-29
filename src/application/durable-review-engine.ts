@@ -30,6 +30,8 @@ import type {
 
 type SandboxHandle = Readonly<{ id: string; estimatedCost?: UsdMicros }>;
 
+export const PUBLICATION_LEASE_DURATION_MS = 30 * 60_000;
+
 export type DurableReviewEnginePorts = Readonly<{
   github: Readonly<{
     snapshot: (run: QueuedRun) => Promise<CapturedPullRequestSnapshot>;
@@ -61,17 +63,26 @@ export class DurableReviewEngine {
   readonly #store: SqliteRunStore;
   readonly #ports: DurableReviewEnginePorts;
   readonly #clock: () => number;
+  readonly #publicationLeaseDurationMs: number;
 
   public constructor(
     options: Readonly<{
       store: SqliteRunStore;
       ports: DurableReviewEnginePorts;
       clock?: () => number;
+      publicationLeaseDurationMs?: number;
     }>,
   ) {
     this.#store = options.store;
     this.#ports = options.ports;
     this.#clock = options.clock ?? Date.now;
+    this.#publicationLeaseDurationMs =
+      options.publicationLeaseDurationMs ?? PUBLICATION_LEASE_DURATION_MS;
+    if (
+      !Number.isSafeInteger(this.#publicationLeaseDurationMs) ||
+      this.#publicationLeaseDurationMs <= 0
+    )
+      throw new Error("publicationLeaseDurationMs must be a positive integer");
   }
 
   public async advance(lease: WorkLease): Promise<void> {
@@ -294,6 +305,7 @@ export class DurableReviewEngine {
       const plan = this.#publicationPlan(run);
       const bodyDigest = createHash("sha256").update(plan.body).digest("hex");
       this.#store.beginPublication({
+        lease,
         runId: run.runId,
         key: `${run.runId}:github-review`,
         bodyDigest,
@@ -301,10 +313,19 @@ export class DurableReviewEngine {
       });
       const existing = await this.#ports.github.findExisting(run);
       this.#fence(lease);
-      const publication =
-        existing ?? (await this.#ports.github.publish(run, plan));
+      let publication = existing;
+      if (publication === null) {
+        this.#store.heartbeatWork({
+          lease,
+          nowMs: this.#clock(),
+          leaseDurationMs: this.#publicationLeaseDurationMs,
+        });
+        this.#fence(lease);
+        publication = await this.#ports.github.publish(run, plan);
+      }
       this.#fence(lease);
       this.#store.recordPublicationSubmitted({
+        lease,
         runId: run.runId,
         reviewId: publication.reviewId,
         submittedAtMs: this.#clock(),

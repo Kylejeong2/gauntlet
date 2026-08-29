@@ -262,6 +262,58 @@ describe("AC-7, AC-8, and AC-10 publication reduction", () => {
     }
   });
 
+  it("does not depress readiness or offer fixes without an actionable finding", () => {
+    const rejected = finding({
+      reviewer: reviewerId("documentation"),
+      location: { path: "README.md", line: 1 },
+    });
+    const result = reducePublication({
+      runId: runId("run-no-actionable-finding"),
+      headSha: commitSha("a".repeat(40)),
+      selectedReviewers: [
+        reviewerId("api-compatibility"),
+        reviewerId("documentation"),
+      ],
+      reports: [
+        {
+          reviewer: reviewerId("api-compatibility"),
+          readiness: 4,
+          rationale: "No compatibility break was found.",
+          examinedAreas: ["public API"],
+          findings: [],
+        },
+        {
+          ...report(rejected),
+          readiness: 1,
+        },
+      ],
+      challenges: [
+        {
+          kind: "rejected",
+          findingId: rejected.id,
+          reason: "The claimed defect is not present.",
+        },
+      ],
+      changedLines: [{ path: "README.md", lines: [1] }],
+      priorStableIdentities: [],
+      coverageOmissions: [],
+      estimatedCost: usdMicros(1_000),
+      durationMs: 1_000,
+      reviewSummary,
+    });
+
+    expect(result.kind).toBe("publish");
+    if (result.kind === "publish") {
+      expect(result.body).toContain("**Readiness:** 5.0/5");
+      expect(result.comments).toHaveLength(0);
+      expect(result.reviewerComments).toHaveLength(2);
+      for (const comment of result.reviewerComments) {
+        expect(comment.body).toContain("reviewer: 5/5");
+        expect(comment.body).not.toContain("Prompt to fix");
+      }
+    }
+  });
+
   it("deduplicates semantically, suppresses prior identities, ranks deterministically, and caps at five", () => {
     const candidates = Array.from({ length: 8 }, (_, index) =>
       finding({

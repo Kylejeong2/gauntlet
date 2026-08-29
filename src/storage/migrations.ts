@@ -210,6 +210,10 @@ const migrations: readonly string[] = [
     FROM review_runs
     WHERE state NOT IN ('completed', 'failed');
   `,
+  `
+    ALTER TABLE publications ADD COLUMN claim_worker TEXT;
+    ALTER TABLE publications ADD COLUMN claim_attempt INTEGER;
+  `,
 ];
 
 export const migrate = (
